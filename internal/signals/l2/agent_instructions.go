@@ -36,6 +36,10 @@ const agentInstructionsLineThreshold = 20
 // any AI coding agent (Claude Code, Codex, Copilot, Cursor, Windsurf,
 // or the AGENTS.md convention). Most users use one agent — there's no
 // reason to require directives for all of them.
+//
+// This is a deliberate deviation from the source paper, which lists
+// CLAUDE.md and Copilot instructions as separate L2 feedback loops.
+// Rationale documented in SPEC.md §6 "Deviations from the source paper".
 type AgentInstructions struct{}
 
 func (AgentInstructions) ID() string        { return "l2.agent-instructions" }
