@@ -123,8 +123,8 @@ func makeAssessRunE(flags *assessFlags, stdout, stderr io.Writer) func(*cobra.Co
 				stdoutIsTerminal(stdout))
 
 		if modeIsTUI {
-			rpt, err := tui.Run(func(ctx context.Context) (acmm.Report, error) {
-				return runAssess(ctx, path, pipelineOpts)
+			rpt, err := tui.Run(func(ctx context.Context) (acmm.Report, *scanner.RepoIndex, error) {
+				return runAssessWithIndex(ctx, path, pipelineOpts)
 			})
 			if err != nil {
 				return errCannotRun(err)
@@ -274,21 +274,29 @@ func (p *pipelineOptions) shouldRun(id string, level acmm.Level, family string) 
 }
 
 // runAssess executes the scan -> detect -> score pipeline and returns
-// a populated Report.
+// a populated Report. The TUI flow needs the underlying RepoIndex too
+// (for the fix-apply path), so runAssessWithIndex is the lower-level
+// variant; runAssess preserves the simple Report-only return for
+// existing CLI callers.
 func runAssess(ctx context.Context, path string, opts pipelineOptions) (acmm.Report, error) {
+	rpt, _, err := runAssessWithIndex(ctx, path, opts)
+	return rpt, err
+}
+
+func runAssessWithIndex(ctx context.Context, path string, opts pipelineOptions) (acmm.Report, *scanner.RepoIndex, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
 	abs, err := filepath.Abs(path)
 	if err != nil {
-		return acmm.Report{}, err
+		return acmm.Report{}, nil, err
 	}
 
 	scanStart := time.Now()
 	idx, err := scanner.Scan(abs)
 	if err != nil {
-		return acmm.Report{}, err
+		return acmm.Report{}, nil, err
 	}
 
 	registered := signals.Default.All()
@@ -352,7 +360,7 @@ func runAssess(ctx context.Context, path string, opts pipelineOptions) (acmm.Rep
 		ScannedAt:        time.Now().UTC().Format(time.RFC3339),
 		Verdict:          verdict,
 		Signals:          results,
-	}, nil
+	}, idx, nil
 }
 
 // writeReport serializes the report in the requested format and writes
