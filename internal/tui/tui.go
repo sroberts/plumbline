@@ -15,9 +15,22 @@ import (
 	"github.com/sroberts/plumbline/internal/fix"
 	"github.com/sroberts/plumbline/internal/scanner"
 	"github.com/sroberts/plumbline/internal/signals"
+	"github.com/sroberts/plumbline/internal/skill"
 	"github.com/sroberts/plumbline/internal/textwrap"
 	"github.com/sroberts/plumbline/pkg/acmm"
 )
+
+// skillIsInstalled reports whether the plumbline Claude Code skill
+// already exists in the scanned repo. The TUI gates the [i] install
+// hint on this — there's no value showing an install option for a
+// skill that's already there.
+func skillIsInstalled(idx *scanner.RepoIndex) bool {
+	if idx == nil {
+		return false
+	}
+	_, err := idx.Read(skill.Path)
+	return err == nil
+}
 
 // ScanFunc is the work the TUI delegates to the assess pipeline. It
 // returns both the human-readable Report (rendered on screen) and the
@@ -153,7 +166,22 @@ func (m *model) updateResults(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "r":
 		return m.rescan()
+	case "i":
+		return m.startInstallSkill()
 	}
+	return m, nil
+}
+
+// startInstallSkill builds the install-skill FixPlan and jumps to the
+// preview screen. No-op if the skill is already installed (the hint
+// is hidden in that case, but defensive against rebound key events).
+func (m *model) startInstallSkill() (tea.Model, tea.Cmd) {
+	if skillIsInstalled(m.idx) {
+		return m, nil
+	}
+	m.fixer = nil // skill install is not tied to a Signal
+	m.fixPlan = skill.NewPlan()
+	m.screen = screenFixPreview
 	return m, nil
 }
 
@@ -413,7 +441,12 @@ func (m *model) renderResults() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(styleHint.Render("[↑/↓] select   [enter] detail   [r] rescan   [✚=fixable]   [q] quit"))
+	hint := "[↑/↓] select   [enter] detail   [r] rescan   [✚=fixable]"
+	if !skillIsInstalled(m.idx) {
+		hint += "   [i] install skill"
+	}
+	hint += "   [q] quit"
+	b.WriteString(styleHint.Render(hint))
 	return b.String()
 }
 
@@ -557,7 +590,13 @@ func (m *model) renderFixPreview() string {
 
 func (m *model) renderFixDone() string {
 	var b strings.Builder
-	b.WriteString(styleHeader.Render(fmt.Sprintf("Fix · %s", m.fixer.ID())))
+	// fixer is nil for the install-skill flow (no Signal involved); use
+	// the FixPlan's SignalID as the heading instead.
+	id := m.fixPlan.SignalID
+	if m.fixer != nil {
+		id = m.fixer.ID()
+	}
+	b.WriteString(styleHeader.Render(fmt.Sprintf("Fix · %s", id)))
 	b.WriteString("\n")
 	b.WriteString(strings.Repeat("─", min(60, m.viewWidth())))
 	b.WriteString("\n\n")
