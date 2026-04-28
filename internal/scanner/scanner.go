@@ -10,6 +10,9 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"strings"
+
+	"github.com/sroberts/plumbline/internal/workflows"
 )
 
 // ReadSampleSize is the maximum number of bytes idx.Read returns for any
@@ -33,13 +36,6 @@ type FileEntry struct {
 	Mode fs.FileMode
 }
 
-// WorkflowFile is a placeholder for the parsed CI workflow AST. The
-// scanner emits these once workflow parsing lands; for now the slice
-// is always empty.
-type WorkflowFile struct {
-	Path string
-}
-
 // RepoIndex is the metadata-only view of a repository, handed to every
 // signal detector. Its access contract is enforced by lint (signals are
 // forbidden from doing direct IO) and documented in SPEC.md §5.
@@ -47,7 +43,7 @@ type RepoIndex struct {
 	Root      string
 	Files     []FileEntry
 	ByName    map[string][]string
-	Workflows []WorkflowFile
+	Workflows []*workflows.File
 	HasGit    bool
 
 	fsys  fs.FS
@@ -111,7 +107,34 @@ func ScanFS(fsys fs.FS, root string) (*RepoIndex, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Parse GitHub Actions workflow files into a CI-agnostic AST.
+	// Other CI systems are deferred (SPEC.md §6 CI-system scope).
+	idx.parseWorkflows()
 	return idx, nil
+}
+
+func (idx *RepoIndex) parseWorkflows() {
+	for _, f := range idx.Files {
+		if !strings.HasPrefix(f.Path, ".github/workflows/") {
+			continue
+		}
+		if !(strings.HasSuffix(f.Path, ".yml") || strings.HasSuffix(f.Path, ".yaml")) {
+			continue
+		}
+		data, err := idx.Read(f.Path)
+		if err != nil {
+			continue
+		}
+		w, err := workflows.Parse(f.Path, data)
+		if err != nil {
+			// Unparseable workflow → not the scanner's job to fail; signals
+			// can still see the file via idx.Files and idx.Read if they
+			// want to do regex fallbacks.
+			continue
+		}
+		idx.Workflows = append(idx.Workflows, w)
+	}
 }
 
 // Read returns up to ReadSampleSize bytes of the named tracked file.
