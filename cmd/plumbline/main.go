@@ -110,6 +110,7 @@ publish schemas, etc.). Run 'plumbline help' for topical guides.`,
 		newExplainCmd(stdout, stderr),
 		newSchemaCmd(stdout, stderr),
 		newFixCmd(stdout, stderr),
+		newInstallSkillCmd(stdout, stderr),
 		newVersionCmd(stdout),
 	)
 

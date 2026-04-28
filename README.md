@@ -40,6 +40,9 @@ plumbline inspect l2.agent-instructions
 # Scaffold a missing artifact (dry-run; --apply to actually write).
 plumbline fix l2.agent-instructions
 plumbline fix l2.agent-instructions --apply
+
+# Install a Claude Code skill so AI agents in your repo know how to drive plumbline.
+plumbline install-skill --apply
 ```
 
 ## ACMM levels
@@ -122,7 +125,17 @@ jobs:
 
 `--signal-set v1` pins the rule-set version so the gate can't silently flip when plumbline upgrades. `plumbline help compatibility` documents what each version contains.
 
-## For LLM tool callers
+## Use plumbline from Claude Code (or any agent)
+
+Install the skill into your repo:
+
+```bash
+plumbline install-skill --apply
+```
+
+This writes `.claude/skills/plumbline/SKILL.md` with a hand-tuned guide for AI agents — when to invoke plumbline, the recommended call sequence, the stable signal IDs / schemas / exit codes, and when **not** to invoke it. Once it's in the repo, Claude Code (or any harness that reads `.claude/skills/`) discovers it automatically.
+
+## For LLM tool callers (without the skill)
 
 Recommended call sequence:
 
