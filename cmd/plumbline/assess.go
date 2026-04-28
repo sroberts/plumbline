@@ -10,26 +10,26 @@ import (
 
 func newAssessCmd(stdout, stderr io.Writer) *cobra.Command {
 	var (
-		asJSON         bool
-		reportFmt      string
-		outPath        string
-		eventsFmt      string
-		quiet          bool
-		noColor        bool
-		cli            bool
-		tui            bool
-		failBelow      int
-		profile        string
-		configPath     string
-		minConfidence  string
-		signalSet      string
-		ciSystem       string
-		debug          bool
-		clock          string
-		includeSignal  []string
-		excludeSignal  []string
-		levelFilters   []int
-		familyFilters  []string
+		asJSON        bool
+		reportFmt     string
+		outPath       string
+		eventsFmt     string
+		quiet         bool
+		noColor       bool
+		cli           bool
+		tui           bool
+		failBelow     int
+		profile       string
+		configPath    string
+		minConfidence string
+		signalSet     string
+		ciSystem      string
+		debug         bool
+		clock         string
+		includeSignal []string
+		excludeSignal []string
+		levelFilters  []int
+		familyFilters []string
 	)
 
 	cmd := &cobra.Command{

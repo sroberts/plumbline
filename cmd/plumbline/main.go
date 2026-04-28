@@ -34,9 +34,9 @@ type exitError struct {
 func (e *exitError) Error() string { return e.err.Error() }
 func (e *exitError) Unwrap() error { return e.err }
 
-func errCannotRun(err error) error      { return &exitError{exitCannotRun, err} }
-func errConfigError(err error) error    { return &exitError{exitConfigError, err} } //nolint:unused // wired in M1
-func errInternalError(err error) error  { return &exitError{exitInternalErrror, err} } //nolint:unused
+func errCannotRun(err error) error     { return &exitError{exitCannotRun, err} }
+func errConfigError(err error) error   { return &exitError{exitConfigError, err} }    //nolint:unused // wired in M1
+func errInternalError(err error) error { return &exitError{exitInternalErrror, err} } //nolint:unused
 
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))

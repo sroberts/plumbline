@@ -154,11 +154,11 @@ type SignalResult struct {
 // Verdict is the top-level result of an `assess` run. Its shape is the
 // `verdict` schema published via `plumbline schema verdict`.
 type Verdict struct {
-	Level                Level           `json:"level"`
-	Name                 string          `json:"name"`
+	Level                Level             `json:"level"`
+	Name                 string            `json:"name"`
 	LevelScores          map[Level]float64 `json:"level_scores"`
-	NextGap              []string        `json:"next_gap"`
-	MinConfidenceApplied Confidence      `json:"min_confidence_applied"`
+	NextGap              []string          `json:"next_gap"`
+	MinConfidenceApplied Confidence        `json:"min_confidence_applied"`
 }
 
 // Report is the top-level JSON document emitted by `assess --json`.
