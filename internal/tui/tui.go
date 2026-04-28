@@ -151,8 +151,22 @@ func (m *model) updateResults(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.report.Signals) > 0 {
 			m.screen = screenDetail
 		}
+	case "r":
+		return m.rescan()
 	}
 	return m, nil
+}
+
+// rescan transitions back to the scanning screen and emits a fresh
+// scan command. Used after the initial results land or after a fix
+// has been applied (the verdict will likely change).
+func (m *model) rescan() (tea.Model, tea.Cmd) {
+	m.screen = screenScanning
+	m.cursor = 0
+	return m, func() tea.Msg {
+		report, idx, err := m.scan(context.Background())
+		return doneMsg{report: report, idx: idx, err: err}
+	}
 }
 
 func (m *model) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -283,6 +297,14 @@ func (m *model) updateFixDone(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.fixErr = nil
 		m.fixApplied = false
 		m.screen = screenResults
+	case "r":
+		// Clear fix state and re-run the scan; verdict likely changed.
+		m.fixer = nil
+		m.fixPlan = acmm.FixPlan{}
+		m.fixResult = fix.Result{}
+		m.fixErr = nil
+		m.fixApplied = false
+		return m.rescan()
 	}
 	return m, nil
 }
@@ -391,7 +413,7 @@ func (m *model) renderResults() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(styleHint.Render("[↑/↓] select   [enter] detail   [✚=fixable]   [q] quit"))
+	b.WriteString(styleHint.Render("[↑/↓] select   [enter] detail   [r] rescan   [✚=fixable]   [q] quit"))
 	return b.String()
 }
 
@@ -554,12 +576,12 @@ func (m *model) renderFixDone() string {
 			}
 		}
 		b.WriteString("\n")
-		b.WriteString(styleHint.Render("Re-run plumbline to see the updated verdict."))
+		b.WriteString(styleHint.Render("Press r to rescan and see the updated verdict."))
 		b.WriteString("\n")
 	}
 
 	b.WriteString("\n")
-	b.WriteString(styleHint.Render("[esc/enter] back   [q] quit"))
+	b.WriteString(styleHint.Render("[r] rescan   [esc/enter] back   [q] quit"))
 	return b.String()
 }
 
