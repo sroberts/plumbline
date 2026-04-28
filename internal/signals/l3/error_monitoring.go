@@ -66,7 +66,13 @@ func (s ErrorMonitoring) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceLow,
 		Method:     acmm.MethodContentRegex,
-		Notes:      []string{"low confidence — only checks dependency manifests, not runtime config"},
+		Notes: []string{
+			"no Sentry / OpenTelemetry / Bugsnag / similar dependency found",
+			"low confidence — only checks dependency manifests, not runtime config",
+		},
+		FixHint: "Wire in an error-monitoring SDK (Sentry, OpenTelemetry, or " +
+			"equivalent). Without runtime error signals, AI agents can't " +
+			"distinguish 'this fix worked' from 'this fix silently broke prod.'",
 	}
 }
 

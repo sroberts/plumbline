@@ -3,6 +3,7 @@ package l2
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 
 	"github.com/sroberts/plumbline/internal/scanner"
@@ -68,6 +69,10 @@ func (s PRTemplate) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Resul
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceHigh,
 		Method:     acmm.MethodFilenameMatch,
+		Notes:      []string{"no PR template found at .github/pull_request_template.md or PULL_REQUEST_TEMPLATE/"},
+		FixHint: "Add .github/pull_request_template.md with at least 3 markdown " +
+			"checkboxes ('- [ ] item') so AI agents fill in a structured " +
+			"checklist on every PR.",
 	}
 }
 
@@ -80,7 +85,7 @@ func scorePRTemplate(path string, data []byte) acmm.Result {
 	case checkboxes >= prTemplateSomeCheckboxes:
 		score = acmm.ScoreIncomplete
 	}
-	return acmm.Result{
+	res := acmm.Result{
 		Status:     acmm.StatusFromScore(score),
 		Score:      score,
 		Confidence: acmm.ConfidenceMedium,
@@ -90,6 +95,18 @@ func scorePRTemplate(path string, data []byte) acmm.Result {
 			Excerpt: excerpt(data, 160),
 		}},
 	}
+	switch {
+	case score == acmm.ScoreFound:
+		res.Notes = []string{fmt.Sprintf("%d markdown checkboxes (≥%d)", checkboxes, prTemplateMinCheckboxes)}
+	case score == acmm.ScoreIncomplete:
+		res.Notes = []string{fmt.Sprintf("only %d markdown checkboxes (need ≥%d for Found)", checkboxes, prTemplateMinCheckboxes)}
+		res.FixHint = fmt.Sprintf("Add %d more markdown checkbox(es) to the PR template covering pre-merge checks (tests, docs, version bumps, etc.).",
+			prTemplateMinCheckboxes-checkboxes)
+	default:
+		res.Notes = []string{"PR template exists but has no markdown checkboxes"}
+		res.FixHint = "Add at least 3 markdown checkboxes ('- [ ] tests added', etc.) to make the template actionable for AI agents."
+	}
+	return res
 }
 
 func startsWith(s, prefix string) bool {

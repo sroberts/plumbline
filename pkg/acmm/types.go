@@ -125,7 +125,11 @@ type DiagEntry struct {
 }
 
 // Result is what every signal returns. Score must come from the rubric
-// constants above; Status is derived from Score.
+// constants above; Status is derived from Score. FixHint is a short
+// human-readable recipe — what the user should do to move this signal
+// from Missing/Partial toward Found. Notes are the "why" — diagnostic
+// detail like "27 non-blank lines (need 30)" — populated mainly for
+// Partial results so the TUI / inspect can explain the verdict.
 type Result struct {
 	Status     Status      `json:"status"`
 	Score      float64     `json:"score"`
@@ -133,6 +137,7 @@ type Result struct {
 	Method     Method      `json:"method"`
 	Evidence   []Evidence  `json:"evidence,omitempty"`
 	Notes      []string    `json:"notes,omitempty"`
+	FixHint    string      `json:"fix_hint,omitempty"`
 	Diag       []DiagEntry `json:"diag,omitempty"`
 }
 
@@ -148,6 +153,7 @@ type SignalResult struct {
 	Method     Method      `json:"method"`
 	Evidence   []Evidence  `json:"evidence,omitempty"`
 	Notes      []string    `json:"notes,omitempty"`
+	FixHint    string      `json:"fix_hint,omitempty"`
 	Diag       []DiagEntry `json:"diag,omitempty"`
 }
 

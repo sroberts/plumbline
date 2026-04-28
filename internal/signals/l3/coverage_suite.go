@@ -38,6 +38,10 @@ func (s CoverageSuite) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Re
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceMedium,
 		Method:     acmm.MethodAST,
+		Notes:      []string{"no scheduled (cron) workflow runs the coverage suite"},
+		FixHint: "Add a scheduled workflow (e.g. nightly cron) that runs your " +
+			"full coverage suite. The PR-time gate catches regressions; the " +
+			"scheduled run catches drift on slow-changing code paths.",
 	}
 }
 

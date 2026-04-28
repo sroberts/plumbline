@@ -46,6 +46,11 @@ func (s AcceptanceTracking) Detect(_ context.Context, idx *scanner.RepoIndex) ac
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceMedium,
 		Method:     acmm.MethodFilenameMatch,
+		Notes:      []string{"no auto-qa-tuning.json / acceptance-rates.* or metrics/* file found"},
+		FixHint: "Track AI agent acceptance rates: commit " +
+			"auto-qa-tuning.json (or acceptance-rates.json) and update it " +
+			"from a scheduled job that classifies merged-vs-rejected PRs by " +
+			"category. This is what L4 self-tuning consumes.",
 	}
 }
 

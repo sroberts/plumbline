@@ -300,6 +300,7 @@ func runAssess(ctx context.Context, path string, opts pipelineOptions) (acmm.Rep
 			Method:     r.Method,
 			Evidence:   r.Evidence,
 			Notes:      r.Notes,
+			FixHint:    r.FixHint,
 			Diag:       r.Diag,
 		}
 		results = append(results, entry)

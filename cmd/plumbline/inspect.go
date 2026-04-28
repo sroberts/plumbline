@@ -11,8 +11,16 @@ import (
 
 	"github.com/sroberts/plumbline/internal/scanner"
 	"github.com/sroberts/plumbline/internal/signals"
+	"github.com/sroberts/plumbline/internal/textwrap"
 	"github.com/sroberts/plumbline/pkg/acmm"
 )
+
+// indentWrap word-wraps s and indents each line with prefix. Used for
+// the inspect output so long Notes / Excerpts / FixHints don't run off
+// the right edge.
+func indentWrap(prefix, s string, width int) string {
+	return textwrap.Indent(prefix, s, width)
+}
 
 func newInspectCmd(stdout, stderr io.Writer) *cobra.Command {
 	var (
@@ -96,6 +104,7 @@ See also:
 				Method:     result.Method,
 				Evidence:   result.Evidence,
 				Notes:      result.Notes,
+				FixHint:    result.FixHint,
 				Diag:       result.Diag,
 			}
 
@@ -122,27 +131,32 @@ func writeInspectText(w io.Writer, r acmm.SignalResult, repoPath string) {
 	fmt.Fprintf(w, "Family:      %s\n", r.Family)
 	fmt.Fprintf(w, "Status:      %s   (score=%v  confidence=%s  method=%s)\n",
 		r.Status, r.Score, r.Confidence, r.Method)
-	fmt.Fprintln(w)
 
+	if len(r.Notes) > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Why:")
+		for _, n := range r.Notes {
+			fmt.Fprintln(w, indentWrap("  ", n, 76))
+		}
+	}
+
+	fmt.Fprintln(w)
 	if len(r.Evidence) == 0 {
 		fmt.Fprintln(w, "Evidence: (none)")
 	} else {
 		fmt.Fprintln(w, "Evidence:")
 		for _, e := range r.Evidence {
+			fmt.Fprintf(w, "  %s\n", e.Path)
 			if e.Excerpt != "" {
-				fmt.Fprintf(w, "  %s\n    %q\n", e.Path, e.Excerpt)
-			} else {
-				fmt.Fprintf(w, "  %s\n", e.Path)
+				fmt.Fprintln(w, indentWrap("    ", e.Excerpt, 76))
 			}
 		}
 	}
 
-	if len(r.Notes) > 0 {
+	if r.FixHint != "" {
 		fmt.Fprintln(w)
-		fmt.Fprintln(w, "Notes:")
-		for _, n := range r.Notes {
-			fmt.Fprintf(w, "  %s\n", n)
-		}
+		fmt.Fprintln(w, "Fix:")
+		fmt.Fprintln(w, indentWrap("  ", r.FixHint, 76))
 	}
 
 	fmt.Fprintln(w)

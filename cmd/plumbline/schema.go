@@ -126,6 +126,7 @@ const schemaSignalResult = `{
       }
     },
     "notes": { "type": "array", "items": { "type": "string" } },
+    "fix_hint": { "type": "string", "description": "Short prose recipe for how to move this signal toward Found." },
     "diag": {
       "type": "array",
       "items": {

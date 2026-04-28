@@ -69,6 +69,11 @@ func (s ContributorGuide) Detect(_ context.Context, idx *scanner.RepoIndex) acmm
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceHigh,
 		Method:     acmm.MethodFilenameMatch,
+		Notes:      []string{"no CONTRIBUTING.md or equivalent contributor guide at known paths"},
+		FixHint: "Add CONTRIBUTING.md (or .github/CONTRIBUTING.md) covering " +
+			"how PRs are reviewed, what counts as a 'good' change, and the " +
+			"common rejection reasons. Aim for ≥20 substantive lines under " +
+			"at least one heading.",
 	}
 }
 

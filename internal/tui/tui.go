@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/sroberts/plumbline/internal/textwrap"
 	"github.com/sroberts/plumbline/pkg/acmm"
 )
 
@@ -225,10 +226,19 @@ func (m *model) renderDetail() string {
 		return ""
 	}
 	s := m.report.Signals[m.cursor]
+
+	// Compute the wrap width from the current viewport. Subtract a
+	// margin for the indent prefixes used inside each block.
+	wrapWidth := m.width
+	if wrapWidth <= 0 {
+		wrapWidth = 80
+	}
+	bodyWidth := wrapWidth - 2 // indent margin
+
 	var b strings.Builder
 	b.WriteString(styleHeader.Render(fmt.Sprintf("%s · %s", s.ID, statusStyle(s.Status).Render(string(s.Status)))))
 	b.WriteString("\n")
-	b.WriteString(strings.Repeat("─", 60))
+	b.WriteString(strings.Repeat("─", min(60, wrapWidth)))
 	b.WriteString("\n")
 	b.WriteString(fmt.Sprintf("Title:      %s\n", s.Title))
 	b.WriteString(fmt.Sprintf("Level:      %d (%s)\n", s.Level, s.Level.Name()))
@@ -238,6 +248,18 @@ func (m *model) renderDetail() string {
 	b.WriteString(fmt.Sprintf("Method:     %s\n", s.Method))
 	b.WriteString("\n")
 
+	// "Why" block — Notes carry the rubric explanation. Surface this
+	// before Evidence so the user understands the verdict immediately.
+	if len(s.Notes) > 0 {
+		b.WriteString(styleHeader.Render("Why:"))
+		b.WriteString("\n")
+		for _, n := range s.Notes {
+			b.WriteString(textwrap.Indent("  · ", n, bodyWidth))
+			b.WriteByte('\n')
+		}
+		b.WriteString("\n")
+	}
+
 	if len(s.Evidence) == 0 {
 		b.WriteString(styleNA.Render("Evidence: (none)\n"))
 	} else {
@@ -246,21 +268,30 @@ func (m *model) renderDetail() string {
 		for _, e := range s.Evidence {
 			b.WriteString(fmt.Sprintf("  %s\n", e.Path))
 			if e.Excerpt != "" {
-				b.WriteString(fmt.Sprintf("    %s\n", styleNA.Render(e.Excerpt)))
+				b.WriteString(styleNA.Render(textwrap.Indent("    ", e.Excerpt, bodyWidth)))
+				b.WriteByte('\n')
 			}
 		}
 	}
 
-	if len(s.Notes) > 0 {
+	// "Fix" block — load-bearing. The user opened the detail screen
+	// because something is wrong; tell them how to fix it.
+	if s.FixHint != "" {
 		b.WriteString("\n")
-		b.WriteString(styleHeader.Render("Notes:"))
+		b.WriteString(styleHeader.Render("Fix:"))
 		b.WriteString("\n")
-		for _, n := range s.Notes {
-			b.WriteString(fmt.Sprintf("  %s\n", n))
-		}
+		b.WriteString(textwrap.Indent("  ", s.FixHint, bodyWidth))
+		b.WriteByte('\n')
 	}
 
 	b.WriteString("\n")
 	b.WriteString(styleHint.Render("[esc/enter] back   [q] quit"))
 	return b.String()
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

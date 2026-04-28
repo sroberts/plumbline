@@ -38,6 +38,10 @@ func (s NightlyCompliance) Detect(_ context.Context, idx *scanner.RepoIndex) acm
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceMedium,
 		Method:     acmm.MethodAST,
+		Notes:      []string{"no scheduled compliance / a11y / perf / security workflow detected"},
+		FixHint: "Add a nightly cron workflow named (or with a path containing) " +
+			"'nightly', 'compliance', 'a11y', 'perf', or 'security'. Use it " +
+			"to run the heavy checks that don't fit the per-PR latency budget.",
 	}
 }
 
