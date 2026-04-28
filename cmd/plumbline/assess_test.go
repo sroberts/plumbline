@@ -22,20 +22,21 @@ func writeFile(t *testing.T, dir, rel, body string) {
 	}
 }
 
-// substantiveClaudeMD is a CLAUDE.md body that satisfies the L2 signal
-// (heading + ≥30 non-blank lines).
-func substantiveClaudeMD() string {
+// substantiveAgentInstructions is a CLAUDE.md body that satisfies the
+// l2.agent-instructions signal (heading + ≥20 non-blank lines).
+func substantiveAgentInstructions() string {
 	body := "# CLAUDE.md\n\n"
-	body += strings.Repeat("Some real, non-blank line of guidance.\n", 35)
+	body += strings.Repeat("Some real, non-blank line of guidance.\n", 25)
 	return body
 }
 
 func TestAssessJSON_FoundAllL2ReachesLevelTwo(t *testing.T) {
 	dir := t.TempDir()
 	// Write a substantive artifact for every L2 signal so the level
-	// passes the threshold.
-	writeFile(t, dir, "CLAUDE.md", substantiveClaudeMD())
-	writeFile(t, dir, ".github/copilot-instructions.md", "# Copilot\n\n"+strings.Repeat("guideline.\n", 25))
+	// passes the threshold. ONE agent-instructions file is enough now —
+	// the signal is satisfied by any of CLAUDE.md / AGENTS.md /
+	// .github/copilot-instructions.md / .cursorrules / .windsurfrules.
+	writeFile(t, dir, "CLAUDE.md", substantiveAgentInstructions())
 	writeFile(t, dir, "CONTRIBUTING.md", "# Contributing\n\n"+strings.Repeat("rule.\n", 25))
 	writeFile(t, dir, ".github/pull_request_template.md", "## Summary\n\n- [ ] one\n- [ ] two\n- [ ] three\n")
 	writeFile(t, dir, ".gitmessage", "subject\n\nbody\n")
@@ -65,23 +66,48 @@ func TestAssessJSON_FoundAllL2ReachesLevelTwo(t *testing.T) {
 
 	var got *acmm.SignalResult
 	for i := range report.Signals {
-		if report.Signals[i].ID == "l2.claude-md" {
+		if report.Signals[i].ID == "l2.agent-instructions" {
 			got = &report.Signals[i]
 			break
 		}
 	}
 	if got == nil {
-		t.Fatalf("l2.claude-md not in signals; ids=%v", signalIDs(report.Signals))
+		t.Fatalf("l2.agent-instructions not in signals; ids=%v", signalIDs(report.Signals))
 	}
 	if got.Status != acmm.StatusFound {
-		t.Errorf("l2.claude-md status = %q, want found", got.Status)
+		t.Errorf("l2.agent-instructions status = %q, want found", got.Status)
 	}
 	if got.Score != acmm.ScoreFound {
-		t.Errorf("l2.claude-md score = %v, want %v", got.Score, acmm.ScoreFound)
+		t.Errorf("l2.agent-instructions score = %v, want %v", got.Score, acmm.ScoreFound)
 	}
 }
 
-func TestAssessJSON_MissingClaudeMDStaysAtLevelOne(t *testing.T) {
+// TestAssessJSON_AGENTSmdAlsoCounts is the user's whole point — having
+// AGENTS.md (or .cursorrules, etc.) instead of CLAUDE.md is enough for
+// the L2 agent-instructions signal.
+func TestAssessJSON_AGENTSmdAlsoCounts(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "AGENTS.md", "# AGENTS\n\n"+strings.Repeat("rule.\n", 25))
+
+	code, out, _ := runCLI(t, "assess", "--json", dir)
+	if code != exitOK {
+		t.Fatalf("exit = %d, want 0", code)
+	}
+	var report acmm.Report
+	_ = json.Unmarshal([]byte(out), &report)
+
+	for _, s := range report.Signals {
+		if s.ID == "l2.agent-instructions" {
+			if s.Score != acmm.ScoreFound {
+				t.Errorf("with AGENTS.md only, score = %v, want Found", s.Score)
+			}
+			return
+		}
+	}
+	t.Fatal("l2.agent-instructions not present in report")
+}
+
+func TestAssessJSON_MissingAgentInstructionsStaysAtLevelOne(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "README.md", "# repo\n")
 
@@ -96,18 +122,17 @@ func TestAssessJSON_MissingClaudeMDStaysAtLevelOne(t *testing.T) {
 	}
 
 	if report.Verdict.Level != acmm.LevelAssisted {
-		t.Errorf("Verdict.Level = %d, want 1 (Assisted) when CLAUDE.md is missing", report.Verdict.Level)
+		t.Errorf("Verdict.Level = %d, want 1 (Assisted) when no agent file is present", report.Verdict.Level)
 	}
-	// next_gap should call out the missing signal at L+1 (=L2).
 	found := false
 	for _, id := range report.Verdict.NextGap {
-		if id == "l2.claude-md" {
+		if id == "l2.agent-instructions" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("next_gap missing 'l2.claude-md'; got %v", report.Verdict.NextGap)
+		t.Errorf("next_gap missing 'l2.agent-instructions'; got %v", report.Verdict.NextGap)
 	}
 }
 

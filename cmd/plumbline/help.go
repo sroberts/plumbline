@@ -95,7 +95,7 @@ See: 'plumbline help scoring' for how levels are computed.
 const helpSignals = `# Signals
 
 A **signal** is one detector. Each signal:
-- Has a stable ID (e.g., 'l2.claude-md').
+- Has a stable ID (e.g., 'l2.agent-instructions').
 - Belongs to one ACMM level (2–5).
 - Returns a Result with: status, score, confidence, method, evidence.
 
@@ -284,13 +284,13 @@ target repo (see SPEC.md §11). Everything else is read-only.
 ### CLI (one-shot, scriptable)
 
   # Dry-run: see what would be written.
-  plumbline fix l2.claude-md
+  plumbline fix l2.agent-instructions
 
   # Actually write.
-  plumbline fix l2.claude-md --apply
+  plumbline fix l2.agent-instructions --apply
 
   # Provide inputs up front.
-  plumbline fix l2.claude-md --apply \
+  plumbline fix l2.agent-instructions --apply \
       --input "project_summary=A Go CLI for X." \
       --input "conventions=- Use UV for Python envs.\n- No raw SQL."
 
@@ -316,8 +316,7 @@ Every Apply call enforces:
 
 Currently the L2 catalog (file scaffolding):
 
-- l2.claude-md            scaffolds CLAUDE.md or appends to existing
-- l2.copilot-instructions scaffolds .github/copilot-instructions.md
+- l2.agent-instructions   scaffolds the chosen agent file (CLAUDE.md / AGENTS.md / etc.)
 - l2.contributor-guide    scaffolds CONTRIBUTING.md
 - l2.pr-template          scaffolds .github/pull_request_template.md
 - l2.commit-rules         scaffolds .gitmessage

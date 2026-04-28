@@ -38,7 +38,7 @@ the signal's status, score, confidence, evidence, and a fix recipe.
 
 Examples:
   # Inspect why CLAUDE.md detection said what it said.
-  plumbline inspect l2.claude-md
+  plumbline inspect l2.agent-instructions
 
   # JSON for an LLM agent to parse.
   plumbline inspect l3.coverage-gate --json

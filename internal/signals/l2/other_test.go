@@ -28,28 +28,6 @@ type signalLike interface {
 	Detect(context.Context, *scanner.RepoIndex) acmm.Result
 }
 
-func TestCopilotInstructions(t *testing.T) {
-	cases := []struct {
-		name  string
-		files fstest.MapFS
-		want  float64
-	}{
-		{"absent", fstest.MapFS{}, acmm.ScoreMissing},
-		{"stubbed", fstest.MapFS{".github/copilot-instructions.md": {Data: []byte("just text\nno markdown\n")}}, acmm.ScoreStubbed},
-		{"incomplete: heading only", fstest.MapFS{".github/copilot-instructions.md": {Data: []byte("# h\n\nshort\n")}}, acmm.ScoreIncomplete},
-		{"found", fstest.MapFS{".github/copilot-instructions.md": {Data: []byte("# Copilot\n\n" + longBody(25))}}, acmm.ScoreFound},
-	}
-	for _, c := range cases {
-		c := c
-		t.Run(c.name, func(t *testing.T) {
-			got := runSignal(t, CopilotInstructions{}, c.files)
-			if got.Score != c.want {
-				t.Errorf("score = %v, want %v", got.Score, c.want)
-			}
-		})
-	}
-}
-
 func TestContributorGuide(t *testing.T) {
 	cases := []struct {
 		name  string

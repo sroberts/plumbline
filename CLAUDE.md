@@ -25,12 +25,14 @@ The model assigns a level by **feedback loop topology**, not by AI autonomy. Lev
 | Level | Name | Loop topology | Artifact families to detect |
 |------|------|--------------|-----------------------------|
 | 1 | Assisted | Open loop | Code only; no encoded context |
-| 2 | Instructed | Human → AI | `CLAUDE.md`, `.github/copilot-instructions.md`, contributor/style guides, PR template checklists |
+| 2 | Instructed | Human → AI | one of `CLAUDE.md` / `AGENTS.md` / `.github/copilot-instructions.md` / `.cursorrules` / `.windsurfrules`, plus contributor guide, PR template checklist, commit rules |
 | 3 | Measured | AI → metrics → human | Coverage gates, nightly suites (compliance/perf/a11y/security), flaky-test analysis, error monitoring, NPS, acceptance-rate logs (e.g. `auto-qa-tuning.json`) |
 | 4 | Adaptive | Loop closes without human in the path | Self-modifying configs, automated triage workflows, threshold-driven blocks, worktree-based concurrent agents |
 | 5 | Self-Sustaining | Codebase *is* the policy | Issue-to-PR automation, self-improvement cycles that update guidance from merged-PR analysis |
 
 The author's KubeStellar Console reference points (paths and cron cadences) are listed in Table 2 of the paper around lines 1042–1260 of `the_ai_codebase_maturity_model.md`. Use those as canonical examples of what L2/L3/L4 artifacts look like on disk.
+
+**Plumbline does not follow Table 2 verbatim.** SPEC.md §6 has a "Deviations from the source paper" subsection documenting where the implemented signal catalog diverges and why. Most notably: L2 collapses CLAUDE.md / copilot-instructions / AGENTS.md into a single `l2.agent-instructions` signal — most teams use one agent, and requiring directives for several is too strict. Read SPEC.md before changing the catalog.
 
 Two anti-patterns the assessor should also flag:
 

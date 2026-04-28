@@ -32,7 +32,7 @@ rationale for why it matters at its level. Does not scan a repository;
 use 'plumbline inspect' for that.
 
 Examples:
-  plumbline explain l2.claude-md
+  plumbline explain l2.agent-instructions
   plumbline explain l3.coverage-gate --json
 
 See also:

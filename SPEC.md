@@ -248,8 +248,7 @@ Signals are derived directly from Table 2 ("Complete Feedback Loop Inventory") o
 
 | ID | Detection rule |
 |---|---|
-| `l2.claude-md` | `CLAUDE.md` exists at root, ≥ 30 non-blank lines, contains at least one heading. |
-| `l2.copilot-instructions` | `.github/copilot-instructions.md` exists, ≥ 20 non-blank lines. |
+| `l2.agent-instructions` | At least **one** recognized agent-directive file is present at root, with a heading and ≥ 20 non-blank lines. Recognized files (priority order): `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`, `.cursorrules`, `.windsurfrules`. **See "Deviations from the source paper" below.** |
 | `l2.contributor-guide` | `CONTRIBUTING.md` or `.github/CARD_DEVELOPMENT_GUIDE.md` (or analogue) present. |
 | `l2.pr-template` | `.github/pull_request_template.md` (or `PULL_REQUEST_TEMPLATE/`) contains ≥ 3 markdown checkboxes (`- [ ]`). |
 | `l2.commit-rules` | `.gitmessage`, `commitlint.config.*`, or `.github/commit-convention.md` present. |
@@ -287,6 +286,31 @@ Signals are derived directly from Table 2 ("Complete Feedback Loop Inventory") o
 | `l5.multi-repo-orchestration` | `.github/workflows/*` references multiple repos via `gh api repos/...`, or contains a matrix over repo names. |
 
 This catalog is **not** the final word. Each signal lives in its own file under `internal/signals/lN/<id>.go` and is registered through `init()`. Adding a signal is a one-file change.
+
+### Deviations from the source paper
+
+Plumbline mostly follows Table 2 of the ACMM paper, but a few signals have been intentionally restructured. We document those here so the divergence is visible to anyone reading both side-by-side.
+
+#### L2: agent-instructions is one signal, not many
+
+The paper (Table 2, lines 1054–1067) lists `CLAUDE.md` and `Copilot instructions` as **separate feedback loops**, both required at L2. The reference deployment (KubeStellar Console) ran Claude Code *and* GitHub Copilot in parallel, so requiring directives for both made sense in that context.
+
+Plumbline collapses these into a single `l2.agent-instructions` that fires on the presence of **any one** of: `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`, `.cursorrules`, `.windsurfrules`.
+
+**Why:**
+- The vast majority of teams use one coding agent, not several. A repo with a substantive `CLAUDE.md` and no Copilot users was being penalized for not also encoding directives for a tool nobody on the team uses.
+- The L2 *intent* is "encoded preferences exist." That is satisfied by any one of these files; whether it is named `CLAUDE.md` or `AGENTS.md` is a tooling choice, not a maturity signal.
+- AGENTS.md, .cursorrules, and .windsurfrules postdate the paper and are now common in the wild. Pinning the rule to the two files the paper named would mean penalizing repos that adopted the newer conventions.
+
+**Caveat:** teams that *do* genuinely use multiple agents in concert (the KubeStellar pattern) get the same single-signal credit as a single-tool team. We accept this loss of resolution at L2 because the catalog is about *encoding judgement*, not auditing tool coverage. Teams that want stricter enforcement can add custom signals via the future plugin mechanism (§13).
+
+#### L3: PR-template checklist is L2, not L3
+
+The paper places "PR template checklist" under L2 ("Instructed") in its description (lines 549–551) but its Table 2 entry hints at L2 / L3 ambiguity ("Every PR" frequency). Plumbline keeps it at L2: a checklist is encoded judgement, which is the L2 definition.
+
+#### L3+: GitHub-Actions only in MVP
+
+The paper describes 63 CI/CD workflows on GitHub Actions specifically. The L3+ workflow signals here parse `.github/workflows/*.yml` only. Other CI systems (GitLab CI, Buildkite, Jenkins) are deferred to M4+ behind `--ci-system` (see §6 CI-system scope). This is a scope cut, not a philosophical disagreement with the paper.
 
 ## 7. Scoring
 

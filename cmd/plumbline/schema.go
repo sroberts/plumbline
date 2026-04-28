@@ -99,7 +99,7 @@ const schemaSignalResult = `{
   "type": "object",
   "required": ["id", "level", "family", "status", "score", "confidence", "method"],
   "properties": {
-    "id": { "type": "string", "examples": ["l2.claude-md"] },
+    "id": { "type": "string", "examples": ["l2.agent-instructions"] },
     "level": { "type": "integer", "minimum": 1, "maximum": 5 },
     "family": { "type": "string" },
     "title": { "type": "string" },

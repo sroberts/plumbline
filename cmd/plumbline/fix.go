@@ -54,15 +54,15 @@ to fill them in).
 
 Examples:
   # See what 'fix' would write for the missing CLAUDE.md.
-  plumbline fix l2.claude-md
+  plumbline fix l2.agent-instructions
 
   # Actually scaffold CLAUDE.md, providing two inputs up front.
-  plumbline fix l2.claude-md --apply \
+  plumbline fix l2.agent-instructions --apply \
       --input "project_summary=A Go CLI for X." \
       --input "conventions=- Use UV for Python envs.\n- No raw SQL."
 
   # JSON for an LLM tool harness.
-  plumbline fix l2.claude-md --json
+  plumbline fix l2.agent-instructions --json
 
   # Fix in a different repo.
   plumbline fix l2.pr-template /path/to/repo --apply
