@@ -42,4 +42,4 @@ Two anti-patterns the assessor should also flag:
 ## Working norms specific to this repo
 
 - The paper's `.md` is a MarkItDown conversion of a PDF. Expect odd line wrapping, hyphenation across lines, and stray whitespace. Don't "tidy" it — it's the source artifact, and downstream parsing should be robust to it. Quote line ranges rather than reflowing.
-- The README claims an arXiv URL (`arxiv.org/abs/2604.09388v1`) and an author (Andy Anderson). Both appear to be fictional / illustrative for the paper's framing — don't try to fetch the arXiv page or cite the author as a real source when designing the tool.
+- The source paper is real: [arxiv.org/abs/2604.09388v1](https://arxiv.org/abs/2604.09388v1) ("The AI Codebase Maturity Model" by Andy Anderson, IBM Research). The local `the_ai_codebase_maturity_model.md` is the markdown conversion (via Microsoft MarkItDown) of the paper's PDF. Cite the arXiv URL when referencing claims; quote line ranges from the local `.md` when working with specific passages, since the conversion has whitespace/hyphenation quirks worth preserving.
