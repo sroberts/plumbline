@@ -13,7 +13,7 @@ import (
 // interface that runs scan + score + report all at once.
 func TestRoot_NoSubcommandRunsAssess(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "CLAUDE.md", substantiveClaudeMD())
+	writeFile(t, dir, "CLAUDE.md", substantiveAgentInstructions())
 
 	// Bare-invocation form: the path is the only positional arg, no
 	// "assess" keyword. --json forces CLI mode (avoiding the TUI).
@@ -38,7 +38,7 @@ func TestRoot_NoSubcommandRunsAssess(t *testing.T) {
 // the brief text summary, not the cobra usage page.
 func TestRoot_BareInvocationEmitsBriefText(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "CLAUDE.md", substantiveClaudeMD())
+	writeFile(t, dir, "CLAUDE.md", substantiveAgentInstructions())
 
 	code, out, errOut := runCLI(t, "--cli", dir)
 	if code != exitOK {
@@ -58,7 +58,7 @@ func TestRoot_SubcommandsStillWork(t *testing.T) {
 		{"signals", "--json"},
 		{"version"},
 		{"help"},
-		{"explain", "l2.claude-md"},
+		{"explain", "l2.agent-instructions"},
 	} {
 		args := args
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
