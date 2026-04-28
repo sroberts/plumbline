@@ -57,12 +57,12 @@ type RepoIndex struct {
 // Scan walks the repository at the given filesystem path and returns a
 // populated RepoIndex.
 func Scan(root string) (*RepoIndex, error) {
-	return scanFS(os.DirFS(root), root)
+	return ScanFS(os.DirFS(root), root)
 }
 
-// scanFS is the testable core. Tests pass an fstest.MapFS; Scan wraps
+// ScanFS is the testable core. Tests pass an fstest.MapFS; Scan wraps
 // it with os.DirFS for the real filesystem.
-func scanFS(fsys fs.FS, root string) (*RepoIndex, error) {
+func ScanFS(fsys fs.FS, root string) (*RepoIndex, error) {
 	idx := &RepoIndex{
 		Root:   root,
 		ByName: make(map[string][]string),

@@ -26,9 +26,9 @@ func TestScan_IndexesAllNonIgnoredFiles(t *testing.T) {
 		"docs/intro.md": {Data: []byte("# intro")},
 	}
 
-	idx, err := scanFS(fsys, "/repo")
+	idx, err := ScanFS(fsys, "/repo")
 	if err != nil {
-		t.Fatalf("scanFS: %v", err)
+		t.Fatalf("ScanFS: %v", err)
 	}
 	if idx.Root != "/repo" {
 		t.Errorf("Root = %q, want %q", idx.Root, "/repo")
@@ -51,9 +51,9 @@ func TestScan_IgnoresDefaultPaths(t *testing.T) {
 		"src/main.go":           {Data: []byte("package main")},
 	}
 
-	idx, err := scanFS(fsys, ".")
+	idx, err := ScanFS(fsys, ".")
 	if err != nil {
-		t.Fatalf("scanFS: %v", err)
+		t.Fatalf("ScanFS: %v", err)
 	}
 
 	got := filePaths(idx)
@@ -68,18 +68,18 @@ func TestScan_DetectsGit(t *testing.T) {
 		"README.md": {Data: []byte("# r")},
 		".git/HEAD": {Data: []byte("ref: main")},
 	}
-	idx, err := scanFS(withGit, ".")
+	idx, err := ScanFS(withGit, ".")
 	if err != nil {
-		t.Fatalf("scanFS: %v", err)
+		t.Fatalf("ScanFS: %v", err)
 	}
 	if !idx.HasGit {
 		t.Errorf("HasGit = false, want true (a .git directory was present)")
 	}
 
 	noGit := fstest.MapFS{"README.md": {Data: []byte("# r")}}
-	idx, err = scanFS(noGit, ".")
+	idx, err = ScanFS(noGit, ".")
 	if err != nil {
-		t.Fatalf("scanFS: %v", err)
+		t.Fatalf("ScanFS: %v", err)
 	}
 	if idx.HasGit {
 		t.Errorf("HasGit = true, want false (no .git directory)")
@@ -94,9 +94,9 @@ func TestScan_BuildsByNameIndex(t *testing.T) {
 		"src/sub/main.go": {Data: []byte("package sub")},
 	}
 
-	idx, err := scanFS(fsys, ".")
+	idx, err := ScanFS(fsys, ".")
 	if err != nil {
-		t.Fatalf("scanFS: %v", err)
+		t.Fatalf("ScanFS: %v", err)
 	}
 
 	gotClaudes := append([]string(nil), idx.ByName["CLAUDE.md"]...)
@@ -122,7 +122,7 @@ func TestRead_ReturnsContent(t *testing.T) {
 	fsys := fstest.MapFS{
 		"CLAUDE.md": {Data: []byte("hello world")},
 	}
-	idx, _ := scanFS(fsys, ".")
+	idx, _ := ScanFS(fsys, ".")
 
 	got, err := idx.Read("CLAUDE.md")
 	if err != nil {
@@ -136,7 +136,7 @@ func TestRead_ReturnsContent(t *testing.T) {
 func TestRead_CapsAtSampleSize(t *testing.T) {
 	big := bytes.Repeat([]byte("x"), 200*1024) // 200 KiB > 64 KiB cap
 	fsys := fstest.MapFS{"big.txt": {Data: big}}
-	idx, _ := scanFS(fsys, ".")
+	idx, _ := ScanFS(fsys, ".")
 
 	got, err := idx.Read("big.txt")
 	if err != nil {
@@ -149,7 +149,7 @@ func TestRead_CapsAtSampleSize(t *testing.T) {
 
 func TestRead_NonExistentReturnsError(t *testing.T) {
 	fsys := fstest.MapFS{"a.txt": {Data: []byte("a")}}
-	idx, _ := scanFS(fsys, ".")
+	idx, _ := ScanFS(fsys, ".")
 
 	if _, err := idx.Read("missing.txt"); err == nil {
 		t.Errorf("Read of missing file: expected error, got nil")
@@ -161,7 +161,7 @@ func TestRead_CachesAcrossCalls(t *testing.T) {
 	count := &countingFS{
 		MapFS: fstest.MapFS{"a.txt": {Data: []byte("hi")}},
 	}
-	idx, _ := scanFS(count, ".")
+	idx, _ := ScanFS(count, ".")
 	count.opens = 0 // reset; the walk itself doesn't open file content
 
 	if _, err := idx.Read("a.txt"); err != nil {
