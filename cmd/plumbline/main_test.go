@@ -14,16 +14,20 @@ func runCLI(t *testing.T, args ...string) (int, string, string) {
 	return code, stdout.String(), stderr.String()
 }
 
-func TestRoot_NoArgsShowsHelp(t *testing.T) {
-	code, out, _ := runCLI(t)
+// TestRoot_HelpFlagShowsUnifiedDescription — bare 'plumbline' now runs
+// the assess pipeline (see TestRoot_BareInvocationEmitsBriefText), so
+// the explicit way to get the help screen is `plumbline --help`. That
+// page still has to mention the description and the subcommand list.
+func TestRoot_HelpFlagShowsUnifiedDescription(t *testing.T) {
+	code, out, _ := runCLI(t, "--help")
 	if code != exitOK {
 		t.Fatalf("expected exit %d, got %d", exitOK, code)
 	}
 	if !strings.Contains(out, "plumbline assesses") {
-		t.Errorf("root help missing long-description marker; got:\n%s", out)
+		t.Errorf("root --help missing long-description marker; got:\n%s", out)
 	}
 	if !strings.Contains(out, "Available Commands") {
-		t.Errorf("root help missing command list; got:\n%s", out)
+		t.Errorf("root --help missing command list; got:\n%s", out)
 	}
 }
 
@@ -133,9 +137,14 @@ func TestAssess_FlagValidation(t *testing.T) {
 	}
 }
 
-func TestUnknownCommand_ExitsConfigError(t *testing.T) {
-	code, _, _ := runCLI(t, "definitely-not-a-command")
+// TestUnknownFlag_ExitsConfigError — with the unified default action,
+// any non-flag positional that isn't a registered subcommand is treated
+// as a path argument (and falls through to assess, exiting 2 if the
+// path is bogus). The "unknown command" case therefore no longer
+// applies; the meaningful CLI-validation error is an unknown flag.
+func TestUnknownFlag_ExitsConfigError(t *testing.T) {
+	code, _, _ := runCLI(t, "--definitely-not-a-flag")
 	if code != exitConfigError {
-		t.Errorf("expected exit %d for unknown command, got %d", exitConfigError, code)
+		t.Errorf("expected exit %d for unknown flag, got %d", exitConfigError, code)
 	}
 }
