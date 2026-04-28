@@ -6,6 +6,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -20,16 +21,32 @@ import (
 	"github.com/sroberts/plumbline/pkg/acmm"
 )
 
-// skillIsInstalled reports whether the plumbline Claude Code skill
-// already exists in the scanned repo. The TUI gates the [i] install
-// hint on this — there's no value showing an install option for a
-// skill that's already there.
+// skillIsInstalled reports whether the canonical Claude Code skill
+// path is already present in the scanned repo. Kept for backward-compat;
+// the [i] install hint now uses anySkillTargetMissing instead so it
+// advertises the action whenever ANY supported tool's file is absent.
 func skillIsInstalled(idx *scanner.RepoIndex) bool {
 	if idx == nil {
 		return false
 	}
 	_, err := idx.Read(skill.Path)
 	return err == nil
+}
+
+// anySkillTargetMissing reports whether the user could meaningfully
+// install for at least one project-scope target. The TUI hides the
+// [i] install skill hint only when every supported target is already
+// present.
+func anySkillTargetMissing(idx *scanner.RepoIndex) bool {
+	if idx == nil {
+		return true
+	}
+	for _, t := range skill.Targets() {
+		if _, err := idx.Read(t.Path); err != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // ScanFunc is the work the TUI delegates to the assess pipeline. It
@@ -47,6 +64,7 @@ const (
 	screenFixForm
 	screenFixPreview
 	screenFixDone
+	screenSkillTargets
 	screenError
 )
 
@@ -75,6 +93,11 @@ type model struct {
 	fixResult  fix.Result
 	fixErr     error
 	fixApplied bool
+
+	// Skill-install picker state. skillCursor tracks the highlighted
+	// row; skillGlobal toggles project-scope vs user-scope install.
+	skillCursor int
+	skillGlobal bool
 }
 
 // New returns a model wired to the given scan function.
@@ -139,6 +162,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateFixPreview(msg)
 		case screenFixDone:
 			return m.updateFixDone(msg)
+		case screenSkillTargets:
+			return m.updateSkillTargets(msg)
 		case screenError:
 			if msg.String() == "q" {
 				return m, tea.Quit
@@ -172,16 +197,76 @@ func (m *model) updateResults(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// startInstallSkill builds the install-skill FixPlan and jumps to the
-// preview screen. No-op if the skill is already installed (the hint
-// is hidden in that case, but defensive against rebound key events).
+// startInstallSkill opens the target picker (screenSkillTargets) so
+// the user can choose which coding-agent tool to install for and
+// whether to install at project scope or user scope. No-op when the
+// scan didn't produce an index yet.
 func (m *model) startInstallSkill() (tea.Model, tea.Cmd) {
-	if skillIsInstalled(m.idx) {
+	if m.idx == nil {
 		return m, nil
 	}
-	m.fixer = nil // skill install is not tied to a Signal
-	m.fixPlan = skill.NewPlan()
-	m.screen = screenFixPreview
+	m.skillCursor = 0
+	m.skillGlobal = false
+	m.screen = screenSkillTargets
+	return m, nil
+}
+
+// updateSkillTargets handles input on the skill-target picker.
+//
+//	↑/↓ or j/k    move highlight
+//	g             toggle project / user scope
+//	enter         build the plan and go to screenFixPreview
+//	esc           back to results
+//	q             quit
+func (m *model) updateSkillTargets(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	targets := skill.Targets()
+	switch msg.String() {
+	case "q":
+		return m, tea.Quit
+	case "esc":
+		m.screen = screenResults
+		return m, nil
+	case "down", "j":
+		if m.skillCursor < len(targets)-1 {
+			m.skillCursor++
+		}
+		return m, nil
+	case "up", "k":
+		if m.skillCursor > 0 {
+			m.skillCursor--
+		}
+		return m, nil
+	case "g":
+		m.skillGlobal = !m.skillGlobal
+		return m, nil
+	case "enter":
+		if m.skillCursor < 0 || m.skillCursor >= len(targets) {
+			return m, nil
+		}
+		t := targets[m.skillCursor]
+		var (
+			plan acmm.FixPlan
+			err  error
+		)
+		if m.skillGlobal {
+			if !t.SupportsGlobal() {
+				m.fixErr = fmt.Errorf("%s has no documented global location; press g to switch back to project scope", t.Name)
+				m.screen = screenFixDone
+				return m, nil
+			}
+			plan, err = skill.NewPlanForGlobal(t.ID)
+		} else {
+			plan, err = skill.NewPlanFor(t.ID)
+		}
+		if err != nil {
+			m.fixErr = err
+			m.screen = screenFixDone
+			return m, nil
+		}
+		m.fixer = nil
+		m.fixPlan = plan
+		m.screen = screenFixPreview
+	}
 	return m, nil
 }
 
@@ -296,14 +381,29 @@ func (m *model) generatePlan() (tea.Model, tea.Cmd) {
 func (m *model) updateFixPreview(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc", "n":
-		// Cancel; return to detail.
+		// Cancel: return to whichever screen got us here. Skill installs
+		// arrived from the picker; signal fixes from the detail screen.
 		m.fixer = nil
 		m.fixPlan = acmm.FixPlan{}
-		m.screen = screenDetail
+		if m.skillGlobal || isSkillPlan(m.fixPlan) {
+			m.screen = screenSkillTargets
+		} else {
+			m.screen = screenDetail
+		}
 		return m, nil
 	case "y":
-		// Apply.
-		res, err := fix.Apply(m.report.Repo, m.fixPlan, fix.Options{})
+		root := m.report.Repo
+		// Skill installs at user scope use $HOME instead of repo root.
+		if m.skillGlobal && isSkillPlan(m.fixPlan) {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				m.fixErr = fmt.Errorf("could not resolve user home dir: %w", err)
+				m.screen = screenFixDone
+				return m, nil
+			}
+			root = home
+		}
+		res, err := fix.Apply(root, m.fixPlan, fix.Options{})
 		if err != nil {
 			m.fixErr = err
 		}
@@ -312,6 +412,13 @@ func (m *model) updateFixPreview(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.screen = screenFixDone
 	}
 	return m, nil
+}
+
+// isSkillPlan reports whether the given FixPlan came from the
+// install-skill flow (vs a Signal fixer). The skill plan IDs are
+// "install-skill:<target>"; signal plans use the signal ID.
+func isSkillPlan(p acmm.FixPlan) bool {
+	return strings.HasPrefix(p.SignalID, "install-skill:")
 }
 
 func (m *model) updateFixDone(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -380,6 +487,8 @@ func (m *model) View() string {
 		return m.renderFixPreview()
 	case screenFixDone:
 		return m.renderFixDone()
+	case screenSkillTargets:
+		return m.renderSkillTargets()
 	}
 	return ""
 }
@@ -442,7 +551,7 @@ func (m *model) renderResults() string {
 
 	b.WriteString("\n")
 	hint := "[↑/↓] select   [enter] detail   [r] rescan   [✚=fixable]"
-	if !skillIsInstalled(m.idx) {
+	if anySkillTargetMissing(m.idx) {
 		hint += "   [i] install skill"
 	}
 	hint += "   [q] quit"
@@ -621,6 +730,60 @@ func (m *model) renderFixDone() string {
 
 	b.WriteString("\n")
 	b.WriteString(styleHint.Render("[r] rescan   [esc/enter] back   [q] quit"))
+	return b.String()
+}
+
+// renderSkillTargets shows the install-skill target picker. Each row
+// shows the tool name + install path, marked "(installed)" if already
+// present. The header shows the current scope (project / user) and
+// the [g] toggle.
+func (m *model) renderSkillTargets() string {
+	var b strings.Builder
+	b.WriteString(styleHeader.Render("Install plumbline skill — pick a coding-agent tool"))
+	b.WriteString("\n")
+	b.WriteString(strings.Repeat("─", min(60, m.viewWidth())))
+	b.WriteString("\n")
+
+	scope := "project (this repo)"
+	if m.skillGlobal {
+		scope = "user (global, ~/)"
+	}
+	b.WriteString(fmt.Sprintf("Scope: %s   ", styleHeader.Render(scope)))
+	b.WriteString(styleHint.Render("[g] toggle scope"))
+	b.WriteString("\n\n")
+
+	targets := skill.Targets()
+	for i, t := range targets {
+		path := t.Path
+		marker := "  "
+		if m.skillGlobal {
+			if !t.SupportsGlobal() {
+				path = styleNA.Render("(no global location)")
+			} else {
+				path = "~/" + t.GlobalPath
+			}
+		}
+		// "installed" badge — for project scope only; global presence
+		// is harder to detect without home-dir reads we don't want here.
+		if !m.skillGlobal && m.idx != nil {
+			if _, err := m.idx.Read(t.Path); err == nil {
+				marker = styleFound.Render("✓ ")
+			}
+		}
+		shared := ""
+		if t.SharedFile {
+			shared = styleNA.Render("  (shared file)")
+		}
+		line := fmt.Sprintf("%s%-10s  %-22s  %s%s", marker, t.ID, t.Name, path, shared)
+		if i == m.skillCursor {
+			line = styleSelected.Render(line)
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(styleHint.Render("[↑/↓] select   [enter] preview   [g] scope   [esc] back   [q] quit"))
 	return b.String()
 }
 
