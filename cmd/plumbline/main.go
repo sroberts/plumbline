@@ -66,8 +66,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 func newRootCmd(stdout, stderr io.Writer) *cobra.Command {
+	// The root command is also the default action: `plumbline [path]`
+	// (no subcommand) runs the assess pipeline. It binds the same flag
+	// set as the assess subcommand so 'plumbline --json /repo' and
+	// 'plumbline assess --json /repo' are interchangeable.
+	rootFlags := &assessFlags{}
+
 	root := &cobra.Command{
-		Use:   "plumbline",
+		Use:   "plumbline [path]",
 		Short: "Repo-level AI coding readiness assessment based on the ACMM",
 		Long: `plumbline assesses a repository's AI Codebase Maturity Model (ACMM) level
 by detecting feedback-loop artifacts on disk. It runs deterministic checks —
@@ -78,10 +84,21 @@ Two interfaces at full feature parity:
   • Interactive TUI (Bubble Tea) — default when stdout is a TTY
   • Pure CLI — flag-driven, for LLM tool callers and CI gates
 
-Run 'plumbline help' for topical guides, or '<command> --help' for flags.`,
+Bare invocation runs the unified scan + score + report pipeline:
+  plumbline                # scan ".", TUI on a terminal / brief text otherwise
+  plumbline /path/to/repo  # scan a specific repo
+  plumbline --json         # machine-readable verdict
+  plumbline --fail-below 3 # CI gate
+
+This is the same pipeline as 'plumbline assess'. Use the subcommands
+below for narrower operations (inspect a single signal, list signals,
+publish schemas, etc.). Run 'plumbline help' for topical guides.`,
+		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true, // don't dump usage on every error
 		SilenceErrors: true, // we print errors ourselves with the right stream
+		RunE:          makeAssessRunE(rootFlags, stdout, stderr),
 	}
+	bindAssessFlags(root, rootFlags)
 
 	// Replace cobra's built-in `help` command with our topic-help command.
 	root.SetHelpCommand(newHelpCmd(stdout))
