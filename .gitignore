@@ -1,0 +1,16 @@
+# Binaries
+/plumbline
+/dist/
+/build/
+
+# Test artifacts
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/

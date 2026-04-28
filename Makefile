@@ -1,0 +1,35 @@
+.PHONY: build test test-race lint vet tidy clean install help
+
+BIN := plumbline
+PKG := github.com/sroberts/plumbline
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+LDFLAGS := -X $(PKG)/internal/buildinfo.Version=$(VERSION) -X $(PKG)/internal/buildinfo.Commit=$(COMMIT)
+
+build:
+	go build -ldflags='$(LDFLAGS)' -o $(BIN) ./cmd/plumbline
+
+install:
+	go install -ldflags='$(LDFLAGS)' ./cmd/plumbline
+
+test:
+	go test ./...
+
+test-race:
+	go test -race ./...
+
+vet:
+	go vet ./...
+
+tidy:
+	go mod tidy
+
+lint: vet
+	@command -v golangci-lint >/dev/null && golangci-lint run || echo "(golangci-lint not installed; ran go vet only)"
+
+clean:
+	rm -f $(BIN)
+	rm -rf dist build
+
+help:
+	@echo "Targets: build test test-race vet tidy lint clean install"
