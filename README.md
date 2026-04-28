@@ -143,4 +143,8 @@ Stable IDs, stable JSON-Schema `$id`s, stable exit codes (0 ok / 1 gate-failed /
 
 ## Status
 
-Pre-v1. Single-developer project; the catalog covers 21 signals across L2–L5. The fix scaffolder covers the L2 catalog; L3+ fix scaffolders are intentionally deferred (the "merge into existing workflow" case needs more design).
+v0.1.0 — first release. Single-developer project; the catalog covers 21 signals across L2–L5. The fix scaffolder covers the L2 catalog; L3+ fix scaffolders are intentionally deferred (the "merge into existing workflow" case needs more design).
+
+## License
+
+MIT — see [LICENSE](LICENSE).
