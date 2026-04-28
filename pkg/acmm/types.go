@@ -178,3 +178,59 @@ type Report struct {
 	Verdict          Verdict        `json:"verdict"`
 	Signals          []SignalResult `json:"signals"`
 }
+
+// ===== Fix application =====
+//
+// A signal that knows how to scaffold or modify its target implements
+// Fixer (in internal/signals). The fix-apply pipeline consumes these
+// public types so any caller — TUI, CLI, or tool harness — can drive
+// the same plan.
+
+// FixOpKind enumerates the operations a FixPlan can request. Apply
+// rejects anything not in this list to keep the safety surface small.
+type FixOpKind string
+
+const (
+	// FixCreateFile creates a new file. It is a hard error if the path
+	// already exists; the user must remove the conflicting file or use
+	// FixAppendFile instead.
+	FixCreateFile FixOpKind = "create-file"
+
+	// FixAppendFile appends Body to an existing file (newline-separated
+	// from existing content). Errors if the file does not exist.
+	FixAppendFile FixOpKind = "append-file"
+)
+
+// FixOp is one operation in a FixPlan.
+type FixOp struct {
+	Kind FixOpKind `json:"kind"`
+	Path string    `json:"path"` // repo-relative, MUST stay inside repo root
+	Body []byte    `json:"body"`
+}
+
+// FixInputKind tags a FixInput so callers (TUI, future config) can
+// pick the right widget.
+type FixInputKind string
+
+const (
+	FixInputText      FixInputKind = "text"
+	FixInputMultiline FixInputKind = "multiline"
+)
+
+// FixInput describes one user-supplied value a fix needs.
+type FixInput struct {
+	Key      string       `json:"key"`
+	Label    string       `json:"label"`
+	Help     string       `json:"help,omitempty"`
+	Kind     FixInputKind `json:"kind"`
+	Default  string       `json:"default,omitempty"`
+	Required bool         `json:"required"`
+}
+
+// FixPlan is the artifact a Fixer.Plan returns. internal/fix.Apply
+// executes it.
+type FixPlan struct {
+	SignalID string  `json:"signal_id"`
+	Summary  string  `json:"summary"`
+	Ops      []FixOp `json:"ops"`
+}

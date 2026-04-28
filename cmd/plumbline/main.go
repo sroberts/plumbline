@@ -92,6 +92,7 @@ Run 'plumbline help' for topical guides, or '<command> --help' for flags.`,
 		newSignalsCmd(stdout, stderr),
 		newExplainCmd(stdout, stderr),
 		newSchemaCmd(stdout, stderr),
+		newFixCmd(stdout, stderr),
 		newVersionCmd(stdout),
 	)
 
