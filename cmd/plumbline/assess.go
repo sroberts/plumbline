@@ -6,15 +6,20 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"golang.org/x/term"
+
 	"github.com/sroberts/plumbline/internal/buildinfo"
+	"github.com/sroberts/plumbline/internal/report"
 	"github.com/sroberts/plumbline/internal/scanner"
 	"github.com/sroberts/plumbline/internal/scoring"
 	"github.com/sroberts/plumbline/internal/signals"
+	"github.com/sroberts/plumbline/internal/tui"
 	"github.com/sroberts/plumbline/pkg/acmm"
 )
 
@@ -27,7 +32,7 @@ func newAssessCmd(stdout, stderr io.Writer) *cobra.Command {
 		quiet         bool
 		noColor       bool
 		cli           bool
-		tui           bool
+		forceTUI      bool
 		failBelow     int
 		profile       string
 		configPath    string
@@ -83,11 +88,17 @@ See also:
   plumbline help agents      guidance for LLM tool callers`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if cli && tui {
+			if cli && forceTUI {
 				return errCannotRun(errors.New("--cli and --tui are mutually exclusive"))
 			}
 			if len(includeSignal) > 0 && len(excludeSignal) > 0 {
 				return errCannotRun(errors.New("--include-signal and --exclude-signal are mutually exclusive"))
+			}
+			if reportFmt != "" && reportFmt != "json" && reportFmt != "markdown" && reportFmt != "sarif" {
+				return errCannotRun(fmt.Errorf("invalid --report %q (want json|markdown|sarif)", reportFmt))
+			}
+			if eventsFmt != "" && eventsFmt != "ndjson" && eventsFmt != "text" {
+				return errCannotRun(fmt.Errorf("invalid --events %q (want ndjson|text)", eventsFmt))
 			}
 
 			path := "."
@@ -100,24 +111,62 @@ See also:
 				return errCannotRun(err)
 			}
 
-			report, err := runAssess(cmd.Context(), path, scoring.Options{MinConfidence: confLevel})
-			if err != nil {
-				return errCannotRun(err)
+			emitter := report.NewEventEmitter(stderr, eventsFmt == "ndjson")
+
+			pipelineOpts := pipelineOptions{
+				IncludeSignal: includeSignal,
+				ExcludeSignal: excludeSignal,
+				LevelFilters:  levelFilters,
+				FamilyFilters: familyFilters,
+				Scoring:       scoring.Options{MinConfidence: confLevel},
+				Events:        emitter,
+				Debug:         debug,
+				DebugStderr:   stderr,
 			}
 
-			if asJSON {
-				enc := json.NewEncoder(stdout)
-				enc.SetIndent("", "  ")
-				if err := enc.Encode(report); err != nil {
+			// Mode selection per SPEC.md §4.
+			modeIsTUI := forceTUI || (!cli && !asJSON && reportFmt == "" && eventsFmt == "" && !quiet && !debug && stdoutIsTerminal(stdout))
+
+			if modeIsTUI {
+				rpt, err := tui.Run(func(ctx context.Context) (acmm.Report, error) {
+					return runAssess(ctx, path, pipelineOpts)
+				})
+				if err != nil {
 					return errCannotRun(err)
+				}
+				if failBelow > 0 && int(rpt.Verdict.Level) < failBelow {
+					return &exitError{code: exitGateFailed, err: fmt.Errorf("verdict level %d is below --fail-below %d", rpt.Verdict.Level, failBelow)}
 				}
 				return nil
 			}
 
-			// Default human-readable text. Fuller layout (level bars,
-			// next-gap panel) lands in the next PR; for now keep it
-			// short so something useful prints in non-JSON mode.
-			writeBriefText(stdout, report)
+			rpt, err := runAssess(cmd.Context(), path, pipelineOpts)
+			if err != nil {
+				return errCannotRun(err)
+			}
+
+			// --report writes to a file (or "-" = stdout).
+			if reportFmt != "" {
+				if err := writeReport(rpt, reportFmt, outPath, stdout); err != nil {
+					return errCannotRun(err)
+				}
+			} else if asJSON {
+				enc := json.NewEncoder(stdout)
+				enc.SetIndent("", "  ")
+				if err := enc.Encode(rpt); err != nil {
+					return errCannotRun(err)
+				}
+			} else if !quiet {
+				writeBriefText(stdout, rpt)
+			}
+
+			// --fail-below gating: exit 1 if level is below the floor.
+			if failBelow > 0 && int(rpt.Verdict.Level) < failBelow {
+				return &exitError{
+					code: exitGateFailed,
+					err:  fmt.Errorf("verdict level %d is below --fail-below %d", rpt.Verdict.Level, failBelow),
+				}
+			}
 			return nil
 		},
 	}
@@ -130,7 +179,7 @@ See also:
 	f.BoolVarP(&quiet, "quiet", "q", false, "Suppress banners, progress, and trailing hints. Implies --cli.")
 	f.BoolVar(&noColor, "no-color", false, "Disable ANSI color (also via NO_COLOR=1).")
 	f.BoolVar(&cli, "cli", false, "Force pure-CLI mode. Auto-set when stdout is not a TTY.")
-	f.BoolVar(&tui, "tui", false, "Force TUI even when stdout is not a TTY.")
+	f.BoolVar(&forceTUI, "tui", false, "Force TUI even when stdout is not a TTY.")
 	f.IntVar(&failBelow, "fail-below", 0, "Exit 1 if assessed level < N (2-5). 0 = no gate.")
 	f.StringVar(&profile, "profile", "default", "Named signal preset. See 'plumbline help profiles'.")
 	f.StringVar(&configPath, "config", "", "Override config path. Default: .plumbline.yml.")
@@ -147,10 +196,62 @@ See also:
 	return cmd
 }
 
+// pipelineOptions consolidates the flags assess passes to runAssess.
+type pipelineOptions struct {
+	IncludeSignal []string
+	ExcludeSignal []string
+	LevelFilters  []int
+	FamilyFilters []string
+	Scoring       scoring.Options
+	Events        *report.EventEmitter
+	Debug         bool
+	DebugStderr   io.Writer
+}
+
+func (p *pipelineOptions) shouldRun(id string, level acmm.Level, family string) bool {
+	if len(p.IncludeSignal) > 0 {
+		for _, want := range p.IncludeSignal {
+			if want == id {
+				return true
+			}
+		}
+		return false
+	}
+	for _, skip := range p.ExcludeSignal {
+		if skip == id {
+			return false
+		}
+	}
+	if len(p.LevelFilters) > 0 {
+		match := false
+		for _, l := range p.LevelFilters {
+			if l == int(level) {
+				match = true
+				break
+			}
+		}
+		if !match {
+			return false
+		}
+	}
+	if len(p.FamilyFilters) > 0 {
+		match := false
+		for _, f := range p.FamilyFilters {
+			if f == family {
+				match = true
+				break
+			}
+		}
+		if !match {
+			return false
+		}
+	}
+	return true
+}
+
 // runAssess executes the scan -> detect -> score pipeline and returns
-// a populated Report. Pulled out of RunE so it stays testable in
-// isolation when more flags arrive (filters, profiles, --enrich, etc.).
-func runAssess(ctx context.Context, path string, opts scoring.Options) (acmm.Report, error) {
+// a populated Report.
+func runAssess(ctx context.Context, path string, opts pipelineOptions) (acmm.Report, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -160,16 +261,35 @@ func runAssess(ctx context.Context, path string, opts scoring.Options) (acmm.Rep
 		return acmm.Report{}, err
 	}
 
+	scanStart := time.Now()
 	idx, err := scanner.Scan(abs)
 	if err != nil {
 		return acmm.Report{}, err
 	}
 
 	registered := signals.Default.All()
+	if opts.Debug {
+		fmt.Fprintf(opts.DebugStderr, "[debug] scanned %s: %d files, %d workflows\n",
+			abs, len(idx.Files), len(idx.Workflows))
+	}
+
+	if opts.Events != nil {
+		opts.Events.ScanStart(abs, len(registered))
+	}
+
 	results := make([]acmm.SignalResult, 0, len(registered))
 	for _, s := range registered {
+		if !opts.shouldRun(s.ID(), s.Level(), s.Family()) {
+			continue
+		}
+		if opts.Events != nil {
+			opts.Events.SignalStart(s.ID())
+		}
+		t0 := time.Now()
 		r := s.Detect(ctx, idx)
-		results = append(results, acmm.SignalResult{
+		dur := time.Since(t0)
+
+		entry := acmm.SignalResult{
 			ID:         s.ID(),
 			Level:      s.Level(),
 			Family:     s.Family(),
@@ -181,10 +301,22 @@ func runAssess(ctx context.Context, path string, opts scoring.Options) (acmm.Rep
 			Evidence:   r.Evidence,
 			Notes:      r.Notes,
 			Diag:       r.Diag,
-		})
+		}
+		results = append(results, entry)
+
+		if opts.Events != nil {
+			opts.Events.SignalComplete(entry, dur.Milliseconds())
+		}
+		if opts.Debug {
+			fmt.Fprintf(opts.DebugStderr, "[debug] %s: status=%s score=%v confidence=%s method=%s\n",
+				s.ID(), r.Status, r.Score, r.Confidence, r.Method)
+		}
 	}
 
-	verdict := scoring.Compute(results, opts)
+	verdict := scoring.Compute(results, opts.Scoring)
+	if opts.Events != nil {
+		opts.Events.ScanComplete(verdict.Level, time.Since(scanStart).Milliseconds())
+	}
 
 	return acmm.Report{
 		Schema:           buildinfo.Schema,
@@ -196,6 +328,46 @@ func runAssess(ctx context.Context, path string, opts scoring.Options) (acmm.Rep
 		Verdict:          verdict,
 		Signals:          results,
 	}, nil
+}
+
+// writeReport serializes the report in the requested format and writes
+// it to outPath ("-" = stdout).
+func writeReport(r acmm.Report, format, outPath string, stdout io.Writer) error {
+	var data []byte
+	switch format {
+	case "markdown":
+		data = report.Markdown(r)
+	case "json":
+		var err error
+		data, err = json.MarshalIndent(r, "", "  ")
+		if err != nil {
+			return err
+		}
+		data = append(data, '\n')
+	case "sarif":
+		// SARIF stub: minimal valid SARIF 2.1.0 envelope so CI tools
+		// don't fail to parse. Full conversion lands later.
+		data = []byte(`{"version":"2.1.0","$schema":"https://json.schemastore.org/sarif-2.1.0.json","runs":[]}` + "\n")
+	default:
+		return fmt.Errorf("unknown report format: %s", format)
+	}
+
+	if outPath == "-" || outPath == "" {
+		_, err := stdout.Write(data)
+		return err
+	}
+	return os.WriteFile(outPath, data, 0o644)
+}
+
+// stdoutIsTerminal reports whether the given writer is os.Stdout
+// pointing at an interactive terminal. Tests pass *bytes.Buffer (not a
+// terminal) so they take the CLI branch automatically.
+func stdoutIsTerminal(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	return term.IsTerminal(int(f.Fd()))
 }
 
 func parseConfidence(s string) (acmm.Confidence, error) {
