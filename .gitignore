@@ -14,3 +14,10 @@ coverage.html
 *.swp
 .idea/
 .vscode/
+
+# Claude Code project-local state. The plumbline-installed skill at
+# .claude/skills/plumbline/SKILL.md is intentionally per-developer:
+# anyone who wants it runs `plumbline install-skill --apply` in their
+# own checkout. Don't ship it as part of the source tree — it would
+# get stale relative to the in-binary copy in internal/skill/skill.go.
+.claude/
