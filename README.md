@@ -125,15 +125,40 @@ jobs:
 
 `--signal-set v1` pins the rule-set version so the gate can't silently flip when plumbline upgrades. `plumbline help compatibility` documents what each version contains.
 
-## Use plumbline from Claude Code (or any agent)
+## Use plumbline from a coding agent
 
-Install the skill into your repo:
+Install the plumbline-usage guide into the location your tool expects. Pass `--target <name>` to pick:
+
+| Target | Path | Notes |
+|---|---|---|
+| `claude` (default) | `.claude/skills/plumbline/SKILL.md` | dedicated |
+| `cursor` | `.cursor/rules/plumbline.mdc` | dedicated |
+| `gemini` | `GEMINI.md` | shared |
+| `codex` | `AGENTS.md` | shared (also read by other AGENTS.md tools) |
+| `opencode` | `AGENTS.md` | shared |
+| `windsurf` | `.windsurfrules` | shared |
+| `cline` | `.clinerules` | shared |
+| `copilot` | `.github/copilot-instructions.md` | shared |
 
 ```bash
+# This repo (default = claude).
 plumbline install-skill --apply
+
+# Cursor in this repo.
+plumbline install-skill --target cursor --apply
+
+# Gemini, globally (under $HOME).
+plumbline install-skill --target gemini --global --apply
+
+# List all targets.
+plumbline install-skill --list
 ```
 
-This writes `.claude/skills/plumbline/SKILL.md` with a hand-tuned guide for AI agents — when to invoke plumbline, the recommended call sequence, the stable signal IDs / schemas / exit codes, and when **not** to invoke it. Once it's in the repo, Claude Code (or any harness that reads `.claude/skills/`) discovers it automatically.
+`--global` installs at user scope (e.g., `~/.claude/skills/plumbline/SKILL.md`, `~/.gemini/GEMINI.md`) for tools that have a documented global location. Run `--list` for the full set; targets without one will error if you pass `--global`.
+
+The TUI surfaces the same picker: bare `plumbline` on a terminal → press **`i`** → pick a target with `↑/↓` → toggle `[g]` for global ↔ project scope → enter to preview → `y` to install.
+
+The body is hand-tuned for AI agents — when to invoke plumbline, the recommended call sequence, the stable signal IDs / schemas / exit codes, and when **not** to invoke it. The frontmatter is tailored per tool (Claude SKILL.md frontmatter, Cursor `.mdc` frontmatter, plain markdown for AGENTS.md / .windsurfrules / etc.).
 
 ## For LLM tool callers (without the skill)
 
