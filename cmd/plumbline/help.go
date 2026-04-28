@@ -20,6 +20,7 @@ var helpTopics = map[string]string{
 	"agents":        helpAgents,
 	"profiles":      helpProfiles,
 	"compatibility": helpCompatibility,
+	"fix":           helpFix,
 }
 
 func newHelpCmd(stdout io.Writer) *cobra.Command {
@@ -268,6 +269,69 @@ Disables backend-specific signals. For pure web frontends.
 Adds extra strictness for CNCF-style open-source projects: stricter coverage gate, a11y nightly suite required for L3.
 
 Note: profile presets in MVP ship 'default' only. Others land in M4+.
+`
+
+const helpFix = `# Applying Fixes
+
+plumbline can scaffold or extend a repo's L2 instruction artifacts —
+the files that turn an L1 "Assisted" repo into an L2 "Instructed" one.
+
+This is the **only** path through which plumbline writes inside the
+target repo (see SPEC.md §11). Everything else is read-only.
+
+## Two ways to apply a fix
+
+### CLI (one-shot, scriptable)
+
+  # Dry-run: see what would be written.
+  plumbline fix l2.claude-md
+
+  # Actually write.
+  plumbline fix l2.claude-md --apply
+
+  # Provide inputs up front.
+  plumbline fix l2.claude-md --apply \
+      --input "project_summary=A Go CLI for X." \
+      --input "conventions=- Use UV for Python envs.\n- No raw SQL."
+
+### TUI (interactive)
+
+In the detail screen for a fixable signal, press **a** (apply). The
+TUI walks you through any input fields, shows a preview, and asks for
+confirmation before writing.
+
+Signals that have a fixer are marked with **✚** in the results screen.
+
+## Safety guarantees
+
+Every Apply call enforces:
+
+- Paths in the FixPlan must be relative and stay inside repo root.
+- ` + "`create-file`" + ` refuses to overwrite an existing file.
+- ` + "`append-file`" + ` requires the target file to already exist.
+- Dry-run is the default; ` + "`--apply`" + ` is required to write.
+- Unknown FixOpKinds are rejected (no implicit broadening).
+
+## What signals can fix
+
+Currently the L2 catalog (file scaffolding):
+
+- l2.claude-md            scaffolds CLAUDE.md or appends to existing
+- l2.copilot-instructions scaffolds .github/copilot-instructions.md
+- l2.contributor-guide    scaffolds CONTRIBUTING.md
+- l2.pr-template          scaffolds .github/pull_request_template.md
+- l2.commit-rules         scaffolds .gitmessage
+
+L3+ fixes (workflow scaffolding) are deferred — they need more design
+to handle the "merge into existing workflow" case safely.
+
+## When to NOT use fix
+
+- Custom existing instruction files: read what plumbline would
+  generate (dry-run), then hand-edit instead. The fix is a starting
+  point, not a final answer.
+- Anything that would override prose you wrote: plumbline appends
+  rather than overwriting, but the appended block is template-y.
 `
 
 const helpCompatibility = `# Compatibility & Signal-Set Versioning
