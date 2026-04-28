@@ -1,0 +1,1 @@
+Plumbline is a standalone, Golang based, repo level ai coding readiness assessment tool based on the paper ["The AI Codebase Maturity Model: From Assisted Coding to Self-Sustaining Systems"](https://arxiv.org/abs/2604.09388v1) by Andy Anderson. This paper was converted to markdown using Microsoft's MarkItDown utility.

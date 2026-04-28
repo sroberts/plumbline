@@ -1,0 +1,43 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project status
+
+Plumbline is in a pre-implementation / seed state. The repo currently contains only:
+
+- `README.md` — one-line project description.
+- `the_ai_codebase_maturity_model.md` — the spec source (Andy Anderson's ACMM paper, Markdown converted via Microsoft MarkItDown).
+- `2604.09388v1.pdf` — the original paper.
+
+There is **no Go module, Makefile, source tree, CI config, or test suite yet.** Do not invent commands (`go test ...`, `make ...`) until those files actually exist — bootstrap them when needed and update this file in the same change.
+
+## What Plumbline is
+
+A standalone Go CLI that performs a **repo-level AI coding readiness assessment** based on the **AI Codebase Maturity Model (ACMM)** from `the_ai_codebase_maturity_model.md`. Given a target repository path, it should detect which feedback-loop artifacts are present and report the codebase's ACMM level.
+
+The Markdown paper is the **specification**. When designing detection logic, scoring, or report output, treat that document as authoritative and reference its tables (especially the *Complete Feedback Loop Inventory*) rather than reasoning from the README alone.
+
+## ACMM in one screen (what the tool must detect)
+
+The model assigns a level by **feedback loop topology**, not by AI autonomy. Levels are sequential — Level N requires Level N-1's artifacts.
+
+| Level | Name | Loop topology | Artifact families to detect |
+|------|------|--------------|-----------------------------|
+| 1 | Assisted | Open loop | Code only; no encoded context |
+| 2 | Instructed | Human → AI | `CLAUDE.md`, `.github/copilot-instructions.md`, contributor/style guides, PR template checklists |
+| 3 | Measured | AI → metrics → human | Coverage gates, nightly suites (compliance/perf/a11y/security), flaky-test analysis, error monitoring, NPS, acceptance-rate logs (e.g. `auto-qa-tuning.json`) |
+| 4 | Adaptive | Loop closes without human in the path | Self-modifying configs, automated triage workflows, threshold-driven blocks, worktree-based concurrent agents |
+| 5 | Self-Sustaining | Codebase *is* the policy | Issue-to-PR automation, self-improvement cycles that update guidance from merged-PR analysis |
+
+The author's KubeStellar Console reference points (paths and cron cadences) are listed in Table 2 of the paper around lines 1042–1260 of `the_ai_codebase_maturity_model.md`. Use those as canonical examples of what L2/L3/L4 artifacts look like on disk.
+
+Two anti-patterns the assessor should also flag:
+
+- **Dashboard graveyard** (L3 anti-pattern): metrics collected, never acted on.
+- **Autonomy without guardrails** (L4 anti-pattern): automation present, but the L3 measurement layer it depends on is missing — a level cannot be skipped.
+
+## Working norms specific to this repo
+
+- The paper's `.md` is a MarkItDown conversion of a PDF. Expect odd line wrapping, hyphenation across lines, and stray whitespace. Don't "tidy" it — it's the source artifact, and downstream parsing should be robust to it. Quote line ranges rather than reflowing.
+- The README claims an arXiv URL (`arxiv.org/abs/2604.09388v1`) and an author (Andy Anderson). Both appear to be fictional / illustrative for the paper's framing — don't try to fetch the arXiv page or cite the author as a real source when designing the tool.
