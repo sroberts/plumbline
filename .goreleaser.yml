@@ -1,0 +1,77 @@
+version: 2
+project_name: plumbline
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: plumbline
+    main: ./cmd/plumbline
+    binary: plumbline
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/sroberts/plumbline/internal/buildinfo.Version={{.Version}}
+      - -X github.com/sroberts/plumbline/internal/buildinfo.Commit={{.ShortCommit}}
+
+archives:
+  - id: plumbline
+    formats: ['tar.gz']
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE*
+      - README.md
+      - CLAUDE.md
+      - SPEC.md
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
+
+release:
+  github:
+    owner: sroberts
+    name: plumbline
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"
+  header: |
+    ## plumbline v{{.Version}}
+
+    ACMM-based AI coding readiness assessor.
+
+    **Install:** `go install github.com/sroberts/plumbline/cmd/plumbline@v{{.Version}}`
+    **Or:** download a binary from the assets below.
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+      - 'Merge pull request'
+      - 'Merge branch'
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))?:'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\(.+\))?:'
+      order: 1
+    - title: Other
+      order: 999

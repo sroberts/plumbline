@@ -1,0 +1,11 @@
+# subject (≤72 chars): <type>(<scope>): <imperative summary>
+#
+# Body — wrap at 72 characters. Explain WHY this change is needed and
+# WHAT the user-visible effect is. Skip the "what" if the diff is
+# self-explanatory.
+#
+# <type>: feat | fix | docs | refactor | test | chore | perf | ci
+#
+# After saving, run:
+#   git config commit.template .gitmessage
+# (the per-repo .git/config is local, so each contributor opts in).
