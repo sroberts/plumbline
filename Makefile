@@ -1,4 +1,4 @@
-.PHONY: build test test-race lint vet tidy clean install help
+.PHONY: build test test-race lint vet tidy clean install help release-snapshot release-check
 
 BIN := plumbline
 PKG := github.com/sroberts/plumbline
@@ -31,5 +31,13 @@ clean:
 	rm -f $(BIN)
 	rm -rf dist build
 
+release-snapshot:
+	@command -v goreleaser >/dev/null || { echo "install goreleaser: https://goreleaser.com/install/"; exit 1; }
+	goreleaser release --snapshot --clean --skip=publish
+
+release-check:
+	@command -v goreleaser >/dev/null || { echo "install goreleaser: https://goreleaser.com/install/"; exit 1; }
+	goreleaser check
+
 help:
-	@echo "Targets: build test test-race vet tidy lint clean install"
+	@echo "Targets: build test test-race vet tidy lint clean install release-snapshot release-check"
