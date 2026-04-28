@@ -75,6 +75,12 @@ func (s CommitRules) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Resu
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceHigh,
 		Method:     acmm.MethodFilenameMatch,
+		Notes:      []string{"no .gitmessage, commitlint config, or commit-convention.md found"},
+		FixHint: "Pick one: (a) commit a .gitmessage template (and 'git config " +
+			"commit.template .gitmessage'), (b) add a commitlint.config.js " +
+			"with @commitlint/config-conventional, or (c) write a brief " +
+			".github/commit-convention.md describing your prefix vocabulary " +
+			"(feat:, fix:, etc.).",
 	}
 }
 

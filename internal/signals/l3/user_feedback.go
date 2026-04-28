@@ -45,7 +45,14 @@ func (s UserFeedback) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Res
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceLow,
 		Method:     acmm.MethodFilenameMatch,
-		Notes:      []string{"low confidence — name match only"},
+		Notes: []string{
+			"no NPS / survey component or feedback issue template found",
+			"low confidence — name match only",
+		},
+		FixHint: "Add a lightweight user-feedback channel: an NPS / CSAT " +
+			"survey component (e.g. useNPSSurvey hook), or a " +
+			".github/ISSUE_TEMPLATE/feedback.md so users can report what " +
+			"shipped wrong.",
 	}
 }
 

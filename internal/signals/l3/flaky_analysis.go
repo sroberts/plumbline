@@ -50,6 +50,11 @@ func (s FlakyAnalysis) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Re
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceMedium,
 		Method:     acmm.MethodFilenameMatch,
+		Notes:      []string{"no flaky-tests.json or scheduled flaky-analysis workflow"},
+		FixHint: "Track flakes explicitly: commit a flaky-tests.json (or run a " +
+			"weekly workflow named 'flaky-*' that re-runs failing tests N " +
+			"times to identify intermittents). A flake in an autonomous AI " +
+			"loop is far more dangerous than in a human one.",
 	}
 }
 

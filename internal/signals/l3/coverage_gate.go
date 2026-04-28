@@ -74,6 +74,11 @@ func (s CoverageGate) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Res
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceMedium,
 		Method:     acmm.MethodContentRegex,
+		Notes:      []string{"no codecov.yml target and no coverage threshold flag in any PR workflow"},
+		FixHint: "Either commit a codecov.yml with target.coverage (e.g. 80%), " +
+			"or add a coverage threshold flag to your test step " +
+			"(--cov-fail-under=80 for pytest, -coverpkg + threshold for go, etc.) " +
+			"so PRs that drop coverage actually fail.",
 	}
 }
 

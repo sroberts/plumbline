@@ -56,6 +56,10 @@ func (s BuildLintGate) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Re
 			Score:      acmm.ScoreMissing,
 			Confidence: acmm.ConfidenceMedium,
 			Method:     acmm.MethodAST,
+			Notes:      []string{"no push/PR-triggered workflow runs both build and lint"},
+			FixHint: "Add a CI workflow on push/pull_request that builds the " +
+				"project AND runs a linter (golangci-lint, eslint, etc.). " +
+				"Both steps gate every PR — it's the L3 baseline.",
 		}
 	}
 	return acmm.Result{
@@ -64,6 +68,8 @@ func (s BuildLintGate) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Re
 		Confidence: acmm.ConfidenceMedium,
 		Method:     acmm.MethodAST,
 		Evidence:   []acmm.Evidence{{Path: bestPath}},
+		Notes:      []string{"workflow runs only one of build / lint"},
+		FixHint:    "Extend the existing CI workflow so it runs both a build step and a lint step on every push/PR.",
 	}
 }
 

@@ -58,6 +58,8 @@ func (SelfModifyingConfig) Detect(_ context.Context, idx *scanner.RepoIndex) acm
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceMedium,
 		Method:     acmm.MethodAST,
+		Notes:      []string{"no workflow uses peter-evans/create-pull-request, git-auto-commit-action, or git push+commit from a step"},
+		FixHint:    "Add a workflow that, on a metric or schedule, opens a PR back to the repo (peter-evans/create-pull-request is the canonical action). This is the L4 unlock — humans go from execution to governance.",
 	}
 }
 
@@ -100,6 +102,8 @@ func (AutoTriage) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Result 
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceMedium,
 		Method:     acmm.MethodAST,
+		Notes:      []string{"no sub-daily scheduled workflow that touches the GitHub Issues API"},
+		FixHint:    "Add a workflow on a sub-daily cron (e.g. '*/15 * * * *') that runs 'gh issue list' or hits /issues via actions/github-script and triages new issues automatically.",
 	}
 }
 
@@ -153,6 +157,8 @@ func (ThresholdBlock) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Res
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceMedium,
 		Method:     acmm.MethodContentRegex,
+		Notes:      []string{"no workflow has an `if:` conditional reading a metric and gating on a numeric threshold"},
+		FixHint:    "Add a step with `if: ${{ fromJson(steps.metrics.outputs.data).rate < 80 }}` (or similar) so the system blocks itself when a metric crosses a threshold. This is what closes the L4 loop.",
 	}
 }
 
@@ -212,6 +218,8 @@ func (WorktreeAgents) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Res
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceLow,
 		Method:     acmm.MethodFilenameMatch,
+		Notes:      []string{"no .devcontainer / .claude config / git-worktree scripts found"},
+		FixHint:    "Set up infrastructure for concurrent AI agent runs: a .devcontainer/ for reproducible environments, or a script under scripts/ that spawns isolated git worktrees so multiple agents can work in parallel without stepping on each other.",
 	}
 }
 
@@ -257,6 +265,8 @@ func (ErrorRecovery) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Resu
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceMedium,
 		Method:     acmm.MethodAST,
+		Notes:      []string{"no workflow uses nick-fields/retry or has continue-on-error: true"},
+		FixHint:    "Wrap flake-prone steps with nick-fields/retry@v3 (max_attempts: 3) so the autonomous loop doesn't fail on a transient hiccup. Use `continue-on-error: true` for non-blocking diagnostics.",
 	}
 }
 

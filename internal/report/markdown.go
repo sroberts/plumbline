@@ -42,8 +42,16 @@ func Markdown(r acmm.Report) []byte {
 
 	if len(r.Verdict.NextGap) > 0 {
 		fmt.Fprintf(&buf, "## Next-level gap (to reach L%d)\n\n", r.Verdict.Level+1)
+		gapByID := make(map[string]acmm.SignalResult)
+		for _, s := range r.Signals {
+			gapByID[s.ID] = s
+		}
 		for _, id := range r.Verdict.NextGap {
-			fmt.Fprintf(&buf, "- [ ] `%s`\n", id)
+			s := gapByID[id]
+			fmt.Fprintf(&buf, "- [ ] `%s` — %s\n", id, s.Title)
+			if s.FixHint != "" {
+				fmt.Fprintf(&buf, "  - Fix: %s\n", s.FixHint)
+			}
 		}
 		fmt.Fprintln(&buf)
 	}

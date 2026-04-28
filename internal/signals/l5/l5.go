@@ -47,6 +47,8 @@ func (IssueToPR) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Result {
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceMedium,
 		Method:     acmm.MethodAST,
+		Notes:      []string{"no workflow with issues:[opened|labeled] trigger that opens a PR"},
+		FixHint:    "Wire issues to PRs: a workflow on `issues: [opened, labeled]` that calls a fix-generating script (or hands the issue to an AI agent) and then opens a PR via peter-evans/create-pull-request. This is the L5 unlock — community steers, AI implements.",
 	}
 }
 
@@ -94,6 +96,8 @@ func (SelfImprovement) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Re
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceMedium,
 		Method:     acmm.MethodContentRegex,
+		Notes:      []string{"no on-PR-close workflow rewrites CLAUDE.md / copilot-instructions / equivalent"},
+		FixHint:    "Add a workflow on `pull_request: types: [closed]` that analyzes merged PRs and proposes updates to your instruction files (CLAUDE.md, copilot-instructions.md). The codebase teaches itself.",
 	}
 }
 
@@ -131,6 +135,8 @@ func (DocsFromPRs) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Result
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceMedium,
 		Method:     acmm.MethodContentRegex,
+		Notes:      []string{"no PR-triggered workflow updates docs/ / web/docs / README"},
+		FixHint:    "Add a workflow on PR events that regenerates docs/ from the change set (e.g. screenshots, API tables, CHANGELOG entries) and either commits to the branch or opens a docs PR via peter-evans/create-pull-request.",
 	}
 }
 
@@ -167,6 +173,8 @@ func (MultiRepoOrchestration) Detect(_ context.Context, idx *scanner.RepoIndex) 
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceMedium,
 		Method:     acmm.MethodContentRegex,
+		Notes:      []string{"no workflow uses `gh api repos/<other>/...` or matrixes over multiple repos"},
+		FixHint:    "Add a workflow that fans out across your other repos (via `gh api repos/<owner>/<other>/...` calls or a matrix that varies a 'repo' dimension). L5 systems coordinate at the org level, not per-repo.",
 	}
 }
 
