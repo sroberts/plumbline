@@ -1,11 +1,21 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/sroberts/plumbline/internal/buildinfo"
+	"github.com/sroberts/plumbline/internal/scanner"
+	"github.com/sroberts/plumbline/internal/scoring"
+	"github.com/sroberts/plumbline/internal/signals"
+	"github.com/sroberts/plumbline/pkg/acmm"
 )
 
 func newAssessCmd(stdout, stderr io.Writer) *cobra.Command {
@@ -73,17 +83,42 @@ See also:
   plumbline help agents      guidance for LLM tool callers`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_ = args
-			// Cross-flag validation that's true regardless of milestone.
 			if cli && tui {
 				return errCannotRun(errors.New("--cli and --tui are mutually exclusive"))
 			}
 			if len(includeSignal) > 0 && len(excludeSignal) > 0 {
 				return errCannotRun(errors.New("--include-signal and --exclude-signal are mutually exclusive"))
 			}
-			fmt.Fprintln(stderr, "(M1: assess is wired up but the scanner and signals land in the next PR)")
-			fmt.Fprintln(stderr, "Hint: run 'plumbline help' for the topic index.")
-			return errCannotRun(errors.New("not implemented in this milestone"))
+
+			path := "."
+			if len(args) == 1 {
+				path = args[0]
+			}
+
+			confLevel, err := parseConfidence(minConfidence)
+			if err != nil {
+				return errCannotRun(err)
+			}
+
+			report, err := runAssess(cmd.Context(), path, scoring.Options{MinConfidence: confLevel})
+			if err != nil {
+				return errCannotRun(err)
+			}
+
+			if asJSON {
+				enc := json.NewEncoder(stdout)
+				enc.SetIndent("", "  ")
+				if err := enc.Encode(report); err != nil {
+					return errCannotRun(err)
+				}
+				return nil
+			}
+
+			// Default human-readable text. Fuller layout (level bars,
+			// next-gap panel) lands in the next PR; for now keep it
+			// short so something useful prints in non-JSON mode.
+			writeBriefText(stdout, report)
+			return nil
 		},
 	}
 
@@ -110,4 +145,92 @@ See also:
 	f.StringSliceVar(&familyFilters, "family", nil, "Only run signals in family <name>. Repeatable.")
 
 	return cmd
+}
+
+// runAssess executes the scan -> detect -> score pipeline and returns
+// a populated Report. Pulled out of RunE so it stays testable in
+// isolation when more flags arrive (filters, profiles, --enrich, etc.).
+func runAssess(ctx context.Context, path string, opts scoring.Options) (acmm.Report, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return acmm.Report{}, err
+	}
+
+	idx, err := scanner.Scan(abs)
+	if err != nil {
+		return acmm.Report{}, err
+	}
+
+	registered := signals.Default.All()
+	results := make([]acmm.SignalResult, 0, len(registered))
+	for _, s := range registered {
+		r := s.Detect(ctx, idx)
+		results = append(results, acmm.SignalResult{
+			ID:         s.ID(),
+			Level:      s.Level(),
+			Family:     s.Family(),
+			Title:      s.Title(),
+			Status:     r.Status,
+			Score:      r.Score,
+			Confidence: r.Confidence,
+			Method:     r.Method,
+			Evidence:   r.Evidence,
+			Notes:      r.Notes,
+			Diag:       r.Diag,
+		})
+	}
+
+	verdict := scoring.Compute(results, opts)
+
+	return acmm.Report{
+		Schema:           buildinfo.Schema,
+		ToolVersion:      buildinfo.Version,
+		SignalSetVersion: buildinfo.SignalSetVersion,
+		CISystem:         "github-actions",
+		Repo:             abs,
+		ScannedAt:        time.Now().UTC().Format(time.RFC3339),
+		Verdict:          verdict,
+		Signals:          results,
+	}, nil
+}
+
+func parseConfidence(s string) (acmm.Confidence, error) {
+	switch s {
+	case "", "low":
+		return acmm.ConfidenceLow, nil
+	case "medium":
+		return acmm.ConfidenceMedium, nil
+	case "high":
+		return acmm.ConfidenceHigh, nil
+	default:
+		return "", fmt.Errorf("invalid --min-confidence %q (want low|medium|high)", s)
+	}
+}
+
+// writeBriefText prints a one-screen summary of the verdict. The richer
+// layout (level bars, next-gap panel) lands in a follow-up PR.
+func writeBriefText(w io.Writer, r acmm.Report) {
+	fmt.Fprintf(w, "plumbline · %s\n", r.Repo)
+	fmt.Fprintf(w, "Assessed level: %d (%s)\n\n", r.Verdict.Level, r.Verdict.Name)
+	for _, l := range []acmm.Level{
+		acmm.LevelInstructed,
+		acmm.LevelMeasured,
+		acmm.LevelAdaptive,
+		acmm.LevelSelfSustaining,
+	} {
+		fmt.Fprintf(w, "  L%d %-16s  %5.1f%%\n", l, l.Name(), r.Verdict.LevelScores[l]*100)
+	}
+	if len(r.Verdict.NextGap) > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "Next-level gap (to reach L%d):\n", r.Verdict.Level+1)
+		for _, id := range r.Verdict.NextGap {
+			fmt.Fprintf(w, "  · %s\n", id)
+		}
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Hint: re-run with --json for machine-readable output.")
 }

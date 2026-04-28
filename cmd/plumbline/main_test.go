@@ -72,12 +72,12 @@ func TestHelp_UnknownTopic(t *testing.T) {
 	}
 }
 
-// TestStubs_ReportNotImplemented ensures every stub command currently
-// reports a clean exit code rather than panicking. When real logic
-// lands, these tests will be replaced with behavior tests.
+// TestStubs_ReportNotImplemented ensures every still-stub command
+// reports a clean exit code rather than panicking. As real logic lands
+// for each command, its entry drops out of this list and migrates to a
+// behavior test (see assess_test.go for the assess equivalent).
 func TestStubs_ReportNotImplemented(t *testing.T) {
 	cases := [][]string{
-		{"assess"},
 		{"inspect", "l2.claude-md"},
 		{"signals"},
 		{"explain", "l2.claude-md"},
