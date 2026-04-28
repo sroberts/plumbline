@@ -30,9 +30,15 @@ func substantiveClaudeMD() string {
 	return body
 }
 
-func TestAssessJSON_FoundClaudeMDReachesLevelTwo(t *testing.T) {
+func TestAssessJSON_FoundAllL2ReachesLevelTwo(t *testing.T) {
 	dir := t.TempDir()
+	// Write a substantive artifact for every L2 signal so the level
+	// passes the threshold.
 	writeFile(t, dir, "CLAUDE.md", substantiveClaudeMD())
+	writeFile(t, dir, ".github/copilot-instructions.md", "# Copilot\n\n"+strings.Repeat("guideline.\n", 25))
+	writeFile(t, dir, "CONTRIBUTING.md", "# Contributing\n\n"+strings.Repeat("rule.\n", 25))
+	writeFile(t, dir, ".github/pull_request_template.md", "## Summary\n\n- [ ] one\n- [ ] two\n- [ ] three\n")
+	writeFile(t, dir, ".gitmessage", "subject\n\nbody\n")
 
 	code, out, errOut := runCLI(t, "assess", "--json", dir)
 	if code != exitOK {

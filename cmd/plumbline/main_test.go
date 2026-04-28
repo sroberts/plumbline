@@ -72,28 +72,52 @@ func TestHelp_UnknownTopic(t *testing.T) {
 	}
 }
 
-// TestStubs_ReportNotImplemented ensures every still-stub command
-// reports a clean exit code rather than panicking. As real logic lands
-// for each command, its entry drops out of this list and migrates to a
-// behavior test (see assess_test.go for the assess equivalent).
-func TestStubs_ReportNotImplemented(t *testing.T) {
+// TestImplementedCommands_ExitOK is the inverse of the old stub test.
+// All commands the spec covers are wired; this asserts they exit 0 in
+// their happy paths.
+func TestImplementedCommands_ExitOK(t *testing.T) {
 	cases := [][]string{
-		{"inspect", "l2.claude-md"},
 		{"signals"},
+		{"signals", "--json"},
+		{"signals", "--level", "2"},
 		{"explain", "l2.claude-md"},
+		{"explain", "l2.claude-md", "--json"},
 		{"schema", "verdict"},
+		{"schema", "signal-result"},
+		{"schema", "event"},
+		{"schema", "config"},
+		{"version"},
+		{"version", "--json"},
+		{"help"},
+		{"help", "agents"},
+		{"help", "scoring"},
 	}
 	for _, args := range cases {
 		args := args
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			code, _, errOut := runCLI(t, args...)
-			if code != exitCannotRun {
-				t.Errorf("expected exit %d (cannot run / not implemented), got %d", exitCannotRun, code)
-			}
-			if !strings.Contains(errOut, "not implemented") {
-				t.Errorf("expected 'not implemented' marker in stderr, got:\n%s", errOut)
+			if code != exitOK {
+				t.Errorf("exit = %d, want 0 (stderr: %s)", code, errOut)
 			}
 		})
+	}
+}
+
+func TestUnknownSignal_ExitsCannotRun(t *testing.T) {
+	code, _, errOut := runCLI(t, "explain", "definitely-not-a-signal")
+	if code != exitCannotRun {
+		t.Errorf("exit = %d, want %d (stderr: %s)", code, exitCannotRun, errOut)
+	}
+	if !strings.Contains(errOut, "unknown signal") {
+		t.Errorf("expected 'unknown signal' in stderr, got: %s", errOut)
+	}
+}
+
+func TestUnknownSchema_ExitsCannotRun(t *testing.T) {
+	code, _, errOut := runCLI(t, "schema", "definitely-not-a-schema")
+	// cobra's ValidArgs check catches this before our RunE; either exit code is acceptable.
+	if code == exitOK {
+		t.Errorf("expected non-zero exit for unknown schema (stderr: %s)", errOut)
 	}
 }
 

@@ -5,4 +5,7 @@ package main
 // l5), add them here.
 import (
 	_ "github.com/sroberts/plumbline/internal/signals/l2"
+	_ "github.com/sroberts/plumbline/internal/signals/l3"
+	_ "github.com/sroberts/plumbline/internal/signals/l4"
+	_ "github.com/sroberts/plumbline/internal/signals/l5"
 )
