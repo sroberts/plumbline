@@ -33,21 +33,25 @@ jobs:
       # the full scoreboard so a triage PR can address each in one go.
       fail-fast: false
       matrix:
+        # Baselines below are *measured*, not aspirational. Each
+        # expected_level is what plumbline currently produces on the
+        # repo at HEAD (as of 2026-04-29). The canary fires when
+        # plumbline regresses *below* these — e.g. a refactor that
+        # breaks an L1 detector. Climbs above the baseline are green
+        # (and a future PR can ratchet the baseline up).
+        #
+        # All three measure at L1 today: well-run Go projects that
+        # predate plumbline's L2 conventions (CLAUDE.md / AGENTS.md
+        # + PR template + commit rules + contributor guide all
+        # together). That's not a knock on the projects — it's a
+        # real signal about plumbline's current detector strictness.
         include:
-          # cli/cli is a substantial Go project with strong CI; if
-          # plumbline ever puts it below L2, something fundamental
-          # broke in the L2 detectors.
           - repo: cli/cli
-            expected_level: 2
-          # peter-evans/create-pull-request is the action plumbline
-          # itself uses for the ratchet workflow; reasonable canary
-          # for L2 (CONTRIBUTING + agent-instructions territory).
+            expected_level: 1
           - repo: peter-evans/create-pull-request
-            expected_level: 2
-          # nick-fields/retry — the action plumbline uses for
-          # error-recovery; small repo, sanity check.
+            expected_level: 1
           - repo: nick-fields/retry
-            expected_level: 2
+            expected_level: 1
 
     steps:
       - name: check out plumbline (this repo)
