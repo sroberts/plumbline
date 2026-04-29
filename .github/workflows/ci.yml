@@ -52,6 +52,19 @@ jobs:
         run: |
           total=$(go tool cover -func=coverage.txt | awk '/^total:/ {gsub("%",""); print $3}')
           echo "Total coverage: ${total}%"
-          # Floor: 60%. The aspirational target in codecov.yml is the
-          # same; we ratchet both up together as coverage improves.
-          awk -v t="$total" 'BEGIN { if (t+0 < 60) { exit 1 } }'
+          # Floor read from .coverage-floor (one line, percentage as integer).
+          # The ratchet workflow bumps this when coverage exceeds floor + 3.
+          floor=$(cat .coverage-floor 2>/dev/null || echo 60)
+          echo "Floor: ${floor}%"
+          awk -v t="$total" -v f="$floor" 'BEGIN { if (t+0 < f+0) { exit 1 } }'
+
+      - name: codecov upload
+        # Only on push to main; PR runs would clutter codecov with
+        # transient checks for branches that may never merge.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.txt
+          fail_ci_if_error: false
+          verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}
