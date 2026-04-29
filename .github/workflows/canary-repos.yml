@@ -1,0 +1,93 @@
+name: Canary repos
+
+# Weekly verdict canary: runs plumbline against a curated matrix of
+# public repos and fails if any drops below its expected ACMM level.
+# This is a self-test for the scanner — when a refactor accidentally
+# flips a real-world repo's verdict, the canary catches it before the
+# regression lands in a release. Cheap because each canary is a
+# shallow checkout (no full history) of a small-to-medium Go repo.
+#
+# Closes the ACMM L5 multi-repo-orchestration loop: a single workflow
+# fans out across repos via matrix.repo. Adjust the matrix as the
+# scanner gains coverage of more languages / CI shapes.
+
+on:
+  schedule:
+    - cron: '0 8 * * 1'  # Mondays at 08:00 UTC
+  workflow_dispatch:
+  # Also run on changes to the canary list itself so we know
+  # immediately if a new entry is misconfigured.
+  pull_request:
+    paths:
+      - '.github/workflows/canary-repos.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    name: ${{ matrix.repo }} ≥ L${{ matrix.expected_level }}
+    runs-on: ubuntu-latest
+    strategy:
+      # Don't fail the whole matrix when one repo regresses — we want
+      # the full scoreboard so a triage PR can address each in one go.
+      fail-fast: false
+      matrix:
+        # Baselines below are *measured*, not aspirational. Each
+        # expected_level is what plumbline currently produces on the
+        # repo at HEAD (as of 2026-04-29). The canary fires when
+        # plumbline regresses *below* these — e.g. a refactor that
+        # breaks an L1 detector. Climbs above the baseline are green
+        # (and a future PR can ratchet the baseline up).
+        #
+        # All three measure at L1 today: well-run Go projects that
+        # predate plumbline's L2 conventions (CLAUDE.md / AGENTS.md
+        # + PR template + commit rules + contributor guide all
+        # together). That's not a knock on the projects — it's a
+        # real signal about plumbline's current detector strictness.
+        include:
+          - repo: cli/cli
+            expected_level: 1
+          - repo: peter-evans/create-pull-request
+            expected_level: 1
+          - repo: nick-fields/retry
+            expected_level: 1
+
+    steps:
+      - name: check out plumbline (this repo)
+        uses: actions/checkout@v4
+        with:
+          path: plumbline
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: plumbline/go.mod
+          cache: true
+          cache-dependency-path: plumbline/go.sum
+
+      - name: build plumbline
+        working-directory: plumbline
+        run: go build -o /tmp/plumbline ./cmd/plumbline
+
+      - name: shallow-clone canary
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.repo }}
+          path: target
+          fetch-depth: 1
+
+      - name: query repo metadata
+        # Hits the GitHub API just to record the canary commit and
+        # default branch in the run log. Useful when triaging a
+        # regression: you can pin which version the verdict was
+        # measured against. Also: gh api repos/<owner>/<repo>
+        # advertises the multi-repo posture in a way that's grep-able.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api repos/${{ matrix.repo }} --jq '{full_name, default_branch, pushed_at}'
+
+      - name: assess + verdict gate
+        working-directory: target
+        run: |
+          /tmp/plumbline assess --quiet --fail-below ${{ matrix.expected_level }} .
