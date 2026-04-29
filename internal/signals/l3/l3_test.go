@@ -194,3 +194,36 @@ func TestAcceptanceTracking(t *testing.T) {
 		t.Errorf("auto-qa-tuning.json: score = %v, want Found", got.Score)
 	}
 }
+
+func TestUserFeedback_DoesNotSelfDetectOnPlumblineSource(t *testing.T) {
+	// Plumbline's own internal/signals/l3/user_feedback.go used to be a
+	// false positive. Detection must require a frontend-shaped path
+	// in addition to a feedback-flavored filename.
+	files := fstest.MapFS{
+		"internal/signals/l3/user_feedback.go": {Data: []byte("package l3")},
+	}
+	got := runOn(t, UserFeedback{}, files)
+	if got.Score != acmm.ScoreMissing {
+		t.Errorf("self-detection: score = %v, want missing", got.Score)
+	}
+}
+
+func TestUserFeedback_MatchesGenuineComponent(t *testing.T) {
+	files := fstest.MapFS{
+		"web/src/hooks/useNPSSurvey.ts": {Data: []byte("export const useNPSSurvey = () => {}")},
+	}
+	got := runOn(t, UserFeedback{}, files)
+	if got.Score != acmm.ScoreFound {
+		t.Errorf("genuine NPS component: score = %v, want found", got.Score)
+	}
+}
+
+func TestUserFeedback_DocFileWithFeedbackInNameIsRejected(t *testing.T) {
+	files := fstest.MapFS{
+		"docs/feedback-policy.md": {Data: []byte("# how we handle feedback")},
+	}
+	got := runOn(t, UserFeedback{}, files)
+	if got.Score != acmm.ScoreMissing {
+		t.Errorf("docs file mentioning feedback: score = %v, want missing", got.Score)
+	}
+}
