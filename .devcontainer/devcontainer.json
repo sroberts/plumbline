@@ -1,0 +1,31 @@
+{
+  "$schema": "https://raw.githubusercontent.com/devcontainers/spec/main/schemas/devContainer.schema.json",
+  "name": "plumbline",
+
+  // Pin to the same Go major.minor as go.mod. Bump in lockstep when
+  // go.mod's `go` directive moves; CI's actions/setup-go reads
+  // go.mod directly, so the two will rarely drift.
+  "image": "mcr.microsoft.com/devcontainers/go:1.26",
+
+  "features": {
+    // gh CLI for PR / release operations from inside the container.
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "github.vscode-github-actions"
+      ],
+      "settings": {
+        "go.lintTool": "golangci-lint",
+        "go.useLanguageServer": true
+      }
+    }
+  },
+
+  // Warm the module cache + verify the toolchain on first attach so
+  // the first `go test` in a session isn't a cold-start surprise.
+  "postCreateCommand": "go mod download && go vet ./..."
+}
