@@ -1,0 +1,14 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 60%
+        threshold: 1%
+    patch:
+      default:
+        target: 60%
+        threshold: 1%
+
+# Plumbline doesn't push to Codecov today; this file declares the
+# coverage target we hold ourselves to. The L3.coverage-gate signal
+# checks for `target: ...` here as evidence of an explicit gate.

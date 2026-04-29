@@ -1,0 +1,43 @@
+name: nightly-coverage
+
+# Scheduled coverage suite. The PR-time gate in ci.yml catches
+# regressions; this run catches drift on slow-changing code paths
+# and produces a public artifact tracked over time.
+on:
+  schedule:
+    - cron: '0 5 * * *' # daily 05:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: full coverage suite
+        run: go test -coverprofile=coverage.txt -covermode=atomic ./...
+
+      - name: per-function breakdown
+        run: go tool cover -func=coverage.txt
+
+      - name: total
+        run: |
+          total=$(go tool cover -func=coverage.txt | awk '/^total:/ {gsub("%",""); print $3}')
+          echo "Total coverage: ${total}%"
+          echo "## Coverage" >> "$GITHUB_STEP_SUMMARY"
+          echo "Total: **${total}%**" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ github.run_id }}
+          path: coverage.txt
+          retention-days: 30

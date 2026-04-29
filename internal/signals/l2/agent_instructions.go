@@ -1,3 +1,6 @@
+// Package l2 holds Level 2 (Instructed) signals — encoded preferences
+// in instruction files that AI agents consume at the start of every
+// session. See SPEC.md §6.
 package l2
 
 import (

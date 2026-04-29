@@ -148,7 +148,7 @@ func (idx *RepoIndex) Read(p string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, io.LimitReader(f, ReadSampleSize)); err != nil {

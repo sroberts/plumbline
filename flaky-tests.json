@@ -1,0 +1,6 @@
+{
+  "schema": "plumbline/flaky-tests/v1",
+  "policy": "Tests that fail intermittently land here. Workflow: re-run a failing test 5×; if it fails ≥2 of 5 times keep it (real bug); if it fails 1 of 5 the test is flaky and gets logged here for triage. Quarantine threshold: a test in this list for >14 days gets disabled (with an issue) until the underlying flake is fixed.",
+  "tracked": [],
+  "updated_at": "2026-04-28"
+}
