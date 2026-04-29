@@ -55,15 +55,34 @@ jobs:
         # Run perf-budget tests in a separate non-race invocation.
         run: go test -count=1 -run "TestPerfBudget" ./internal/scanner/ ./internal/signals/
 
-      - name: coverage threshold
+      - name: measure coverage
+        id: cov
         run: |
           total=$(go tool cover -func=coverage.txt | awk '/^total:/ {gsub("%",""); print $3}')
-          echo "Total coverage: ${total}%"
           # Floor read from .coverage-floor (one line, percentage as integer).
           # The ratchet workflow bumps this when coverage exceeds floor + 3.
           floor=$(cat .coverage-floor 2>/dev/null || echo 60)
-          echo "Floor: ${floor}%"
-          awk -v t="$total" -v f="$floor" 'BEGIN { if (t+0 < f+0) { exit 1 } }'
+          echo "Total coverage: ${total}%   Floor: ${floor}%"
+          # Emit JSON so the next step's if: can do a numeric comparison
+          # in GitHub-Actions-native form (the L4 threshold-block signal).
+          echo "data={\"total\": ${total}, \"floor\": ${floor}}" >> "$GITHUB_OUTPUT"
+
+      - name: coverage hard floor (catastrophic regression block)
+        # Native if:-conditional gate on a numeric metric. Hard floor
+        # of 50% is a catastrophe detector: even if .coverage-floor
+        # is somehow lowered (manually or by a buggy ratchet), this
+        # step blocks the merge. The soft floor in the next step is
+        # what the ratchet manages day-to-day.
+        if: ${{ fromJson(steps.cov.outputs.data).total < 50 }}
+        run: |
+          echo "::error::coverage ${{ fromJson(steps.cov.outputs.data).total }}% is catastrophically below the 50% hard floor"
+          exit 1
+
+      - name: coverage soft floor (ratchet-managed)
+        if: ${{ fromJson(steps.cov.outputs.data).total < fromJson(steps.cov.outputs.data).floor }}
+        run: |
+          echo "::error::coverage ${{ fromJson(steps.cov.outputs.data).total }}% is below floor ${{ fromJson(steps.cov.outputs.data).floor }}%"
+          exit 1
 
       - name: codecov upload
         # Only on push to main; PR runs would clutter codecov with
