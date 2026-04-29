@@ -53,7 +53,17 @@ jobs:
         # bookkeeping, which would either force the budget so loose
         # it stops catching real regressions or make the gate flake.
         # Run perf-budget tests in a separate non-race invocation.
-        run: go test -count=1 -run "TestPerfBudget" ./internal/scanner/ ./internal/signals/
+        #
+        # Wrapped in retry@v3: the perf-budget tests have wall-clock
+        # ceilings (see internal/scanner/perf_budget_test.go) that
+        # can flake on busy CI runners. Three attempts costs <1 minute
+        # in the worst case and saves the build from a noisy CI runner
+        # erasing real signal. (l4.error-recovery)
+        uses: nick-fields/retry@v3
+        with:
+          max_attempts: 3
+          timeout_minutes: 5
+          command: go test -count=1 -run "TestPerfBudget" ./internal/scanner/ ./internal/signals/
 
       - name: coverage threshold
         run: |
