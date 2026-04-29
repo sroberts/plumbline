@@ -89,12 +89,17 @@ func Load(ctx context.Context, s Spec, repoRoot string) (*Plugin, error) {
 	return p, nil
 }
 
-// ID, Level, Family, Title satisfy signals.Signal. They return what
-// the plugin advertised at Load time.
-func (p *Plugin) ID() string        { return p.id }
+// ID returns the signal ID the plugin advertised at Load time.
+func (p *Plugin) ID() string { return p.id }
+
+// Level returns the ACMM level the plugin advertised at Load time.
 func (p *Plugin) Level() acmm.Level { return p.level }
-func (p *Plugin) Family() string    { return p.family }
-func (p *Plugin) Title() string     { return p.title }
+
+// Family returns the signal family the plugin advertised at Load time.
+func (p *Plugin) Family() string { return p.family }
+
+// Title returns the human-readable title the plugin advertised at Load time.
+func (p *Plugin) Title() string { return p.title }
 
 // Detect runs the plugin and returns the first signal-result whose
 // ID matches p.id. Plugins that emit multiple results all under one
