@@ -555,7 +555,7 @@ func (m *model) renderResults() string {
 		hint += "   [i] install skill"
 	}
 	hint += "   [q] quit"
-	b.WriteString(styleHint.Render(hint))
+	b.WriteString(m.renderHint(hint))
 	return b.String()
 }
 
@@ -618,7 +618,7 @@ func (m *model) renderDetail() string {
 			hint = "[a] apply fix   [esc] back   [q] quit"
 		}
 	}
-	b.WriteString(styleHint.Render(hint))
+	b.WriteString(m.renderHint(hint))
 	return b.String()
 }
 
@@ -653,7 +653,7 @@ func (m *model) renderFixForm() string {
 		b.WriteString("\n\n")
 	}
 
-	b.WriteString(styleHint.Render("[tab/↓] next   [shift+tab/↑] prev   [enter] continue   [esc] cancel"))
+	b.WriteString(m.renderHint("[tab/↓] next   [shift+tab/↑] prev   [enter] continue   [esc] cancel"))
 	return b.String()
 }
 
@@ -693,7 +693,7 @@ func (m *model) renderFixPreview() string {
 	}
 
 	b.WriteString(styleMissing.Render("Apply this fix? "))
-	b.WriteString(styleHint.Render("[y] yes   [n/esc] cancel"))
+	b.WriteString(m.renderHint("[y] yes   [n/esc] cancel"))
 	return b.String()
 }
 
@@ -729,7 +729,7 @@ func (m *model) renderFixDone() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(styleHint.Render("[r] rescan   [esc/enter] back   [q] quit"))
+	b.WriteString(m.renderHint("[r] rescan   [esc/enter] back   [q] quit"))
 	return b.String()
 }
 
@@ -748,8 +748,8 @@ func (m *model) renderSkillTargets() string {
 	if m.skillGlobal {
 		scope = "user (global, ~/)"
 	}
-	b.WriteString(fmt.Sprintf("Scope: %s   ", styleHeader.Render(scope)))
-	b.WriteString(styleHint.Render("[g] toggle scope"))
+	b.WriteString(fmt.Sprintf("Scope: %s\n", styleHeader.Render(scope)))
+	b.WriteString(m.renderHint("[g] toggle scope"))
 	b.WriteString("\n\n")
 
 	targets := skill.Targets()
@@ -783,7 +783,7 @@ func (m *model) renderSkillTargets() string {
 	}
 
 	b.WriteString("\n")
-	b.WriteString(styleHint.Render("[↑/↓] select   [enter] preview   [g] scope   [esc] back   [q] quit"))
+	b.WriteString(m.renderHint("[↑/↓] select   [enter] preview   [g] scope   [esc] back   [q] quit"))
 	return b.String()
 }
 
@@ -794,6 +794,17 @@ func (m *model) viewWidth() int {
 		return 80
 	}
 	return m.width
+}
+
+// renderHint word-wraps a footer hint to the current viewport width
+// and applies the hint style. Every screen's footer goes through this
+// so narrow terminals don't truncate keybindings (issue #19).
+func (m *model) renderHint(hint string) string {
+	w := m.viewWidth()
+	if w <= 0 {
+		w = 80
+	}
+	return styleHint.Render(textwrap.Wrap(hint, w))
 }
 
 func padStatus(s acmm.Status) string {
