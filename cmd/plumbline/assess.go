@@ -391,9 +391,12 @@ func writeReport(r acmm.Report, format, outPath string, stdout io.Writer) error 
 		}
 		data = append(data, '\n')
 	case "sarif":
-		// SARIF stub: minimal valid SARIF 2.1.0 envelope so CI tools
-		// don't fail to parse. Full conversion lands later.
-		data = []byte(`{"version":"2.1.0","$schema":"https://json.schemastore.org/sarif-2.1.0.json","runs":[]}` + "\n")
+		var err error
+		data, err = report.SARIF(r)
+		if err != nil {
+			return err
+		}
+		data = append(data, '\n')
 	default:
 		return fmt.Errorf("unknown report format: %s", format)
 	}
