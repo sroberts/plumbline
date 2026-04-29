@@ -47,6 +47,7 @@ type assessFlags struct {
 	excludeSignal []string
 	levelFilters  []int
 	familyFilters []string
+	historyOut    string
 }
 
 // bindAssessFlags registers the assess flag set on cmd. Used by the
@@ -73,6 +74,7 @@ func bindAssessFlags(cmd *cobra.Command, f *assessFlags) {
 	fs.StringSliceVar(&f.excludeSignal, "exclude-signal", nil, "Skip the listed signals. Repeatable.")
 	fs.IntSliceVar(&f.levelFilters, "level", nil, "Only run signals at level N (2-5). Repeatable.")
 	fs.StringSliceVar(&f.familyFilters, "family", nil, "Only run signals in family <name>. Repeatable.")
+	fs.StringVar(&f.historyOut, "history-out", "", "Append a one-line verdict summary (NDJSON) to this file. Useful for tracking maturity over time.")
 }
 
 // makeAssessRunE returns a cobra RunE closure that drives the assess
@@ -153,6 +155,18 @@ func makeAssessRunE(flags *assessFlags, stdout, stderr io.Writer) func(*cobra.Co
 			}
 		case !flags.quiet:
 			writeBriefText(stdout, rpt)
+		}
+
+		if flags.historyOut != "" {
+			if err := report.AppendHistory(flags.historyOut, report.SummarizeReport(rpt)); err != nil {
+				// Don't fail the assess on history-write failure; the
+				// verdict is the load-bearing output and a CI ratchet
+				// shouldn't break because /tmp filled up. Surface to
+				// stderr unless --quiet.
+				if !flags.quiet {
+					fmt.Fprintf(stderr, "warning: history append failed: %v\n", err)
+				}
+			}
 		}
 
 		if flags.failBelow > 0 && int(rpt.Verdict.Level) < flags.failBelow {
