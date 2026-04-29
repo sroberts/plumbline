@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sroberts/plumbline/internal/buildinfo"
 	"github.com/sroberts/plumbline/pkg/acmm"
 )
 
@@ -54,8 +55,9 @@ func TestAssessJSON_FoundAllL2ReachesLevelTwo(t *testing.T) {
 	if report.Schema != "plumbline/v1" {
 		t.Errorf("schema = %q, want plumbline/v1", report.Schema)
 	}
-	if report.SignalSetVersion != "v1" {
-		t.Errorf("signal_set_version = %q, want v1", report.SignalSetVersion)
+	if report.SignalSetVersion != buildinfo.SignalSetVersion {
+		t.Errorf("signal_set_version = %q, want %q",
+			report.SignalSetVersion, buildinfo.SignalSetVersion)
 	}
 	if report.Verdict.Level != acmm.LevelInstructed {
 		t.Errorf("Verdict.Level = %d, want 2 (Instructed) for substantive CLAUDE.md", report.Verdict.Level)

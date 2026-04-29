@@ -92,6 +92,9 @@ func makeAssessRunE(flags *assessFlags, stdout, stderr io.Writer) func(*cobra.Co
 		if flags.eventsFmt != "" && flags.eventsFmt != "ndjson" && flags.eventsFmt != "text" {
 			return errCannotRun(fmt.Errorf("invalid --events %q (want ndjson|text)", flags.eventsFmt))
 		}
+		if err := validateSignalSet(flags.signalSet); err != nil {
+			return errCannotRun(err)
+		}
 
 		path := "."
 		if len(args) == 1 {
@@ -105,9 +108,19 @@ func makeAssessRunE(flags *assessFlags, stdout, stderr io.Writer) func(*cobra.Co
 
 		emitter := report.NewEventEmitter(stderr, flags.eventsFmt == "ndjson")
 
+		// Rewrite deprecated signal IDs (e.g. v1's l2.claude-md) to
+		// their current names. Warnings go to stderr unless suppressed
+		// by --quiet so JSON output stays machine-clean.
+		warnSink := io.Writer(stderr)
+		if flags.quiet {
+			warnSink = io.Discard
+		}
+		includeIDs, _ := signals.ResolveIDs(flags.includeSignal, warnSink)
+		excludeIDs, _ := signals.ResolveIDs(flags.excludeSignal, warnSink)
+
 		pipelineOpts := pipelineOptions{
-			IncludeSignal: flags.includeSignal,
-			ExcludeSignal: flags.excludeSignal,
+			IncludeSignal: includeIDs,
+			ExcludeSignal: excludeIDs,
 			LevelFilters:  flags.levelFilters,
 			FamilyFilters: flags.familyFilters,
 			Scoring:       scoring.Options{MinConfidence: confLevel},
@@ -401,6 +414,20 @@ func stdoutIsTerminal(w io.Writer) bool {
 		return false
 	}
 	return term.IsTerminal(int(f.Fd()))
+}
+
+// validateSignalSet checks --signal-set against the versions this
+// binary knows about. "latest" and the current SignalSetVersion are
+// always accepted. Older versions (v1) are accepted as well so CI
+// gates pinned to v1 keep working through the deprecation cycle —
+// the alias resolver handles the renamed-IDs side.
+func validateSignalSet(v string) error {
+	switch v {
+	case "", "latest", buildinfo.SignalSetVersion, "v1":
+		return nil
+	default:
+		return fmt.Errorf("unknown --signal-set %q (want latest|%s|v1)", v, buildinfo.SignalSetVersion)
+	}
 }
 
 func parseConfidence(s string) (acmm.Confidence, error) {
