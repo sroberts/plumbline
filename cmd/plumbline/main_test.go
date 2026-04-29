@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/sroberts/plumbline/internal/buildinfo"
 )
 
 // runCLI is a test helper that invokes the CLI in-process.
@@ -39,7 +41,7 @@ func TestVersion_PlainText(t *testing.T) {
 	if !strings.Contains(out, "plumbline ") {
 		t.Errorf("expected version banner, got:\n%s", out)
 	}
-	if !strings.Contains(out, "signal-set: v1") {
+	if !strings.Contains(out, "signal-set: "+buildinfo.SignalSetVersion) {
 		t.Errorf("expected signal-set version line, got:\n%s", out)
 	}
 }
@@ -49,8 +51,9 @@ func TestVersion_JSON(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("expected exit %d, got %d", exitOK, code)
 	}
-	if !strings.Contains(out, `"signal_set_version": "v1"`) {
-		t.Errorf("expected signal_set_version field in JSON, got:\n%s", out)
+	want := `"signal_set_version": "` + buildinfo.SignalSetVersion + `"`
+	if !strings.Contains(out, want) {
+		t.Errorf("expected %s in JSON, got:\n%s", want, out)
 	}
 }
 

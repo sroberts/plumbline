@@ -337,7 +337,7 @@ const helpCompatibility = `# Compatibility & Signal-Set Versioning
 
 Every Verdict carries:
   tool_version       e.g. 1.4.2 (semver)
-  signal_set_version e.g. v1   (rule-set major)
+  signal_set_version e.g. v2   (rule-set major)
 
 ## Within a major version of signal_set_version
 - New signals can be added (a previously-passing repo can pick up additional credit, never lose it).
@@ -348,9 +348,23 @@ Every Verdict carries:
 - Removing or renaming a signal.
 
 ## Pinning in CI
-Use '--signal-set v1' so the verdict cannot silently flip when plumbline upgrades:
+Use '--signal-set v2' so the verdict cannot silently flip when plumbline upgrades:
 
-  plumbline assess --fail-below 3 --signal-set v1
+  plumbline assess --fail-below 3 --signal-set v2
 
 If the pinned version is unavailable (retired, tool too old/new), exit code 3 fires with a migration message.
+
+## Deprecation aliases (v1 → v2)
+The following IDs were renamed; v1's names still work for one minor
+version but emit a deprecation warning to stderr and rewrite to the
+current ID. CI gates pinning '--signal-set v1' should migrate before
+the alias is removed.
+
+  l2.claude-md            → l2.agent-instructions
+  l2.copilot-instructions → l2.agent-instructions
+
+Reason: any one of CLAUDE.md / AGENTS.md / .github/copilot-instructions.md /
+.cursorrules / .windsurfrules satisfies the underlying signal — most teams
+use one agent and requiring directives for several is too strict.
+Pass --quiet to suppress the warning when the deprecation is known.
 `
