@@ -15,6 +15,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/sroberts/plumbline/internal/buildinfo"
+	"github.com/sroberts/plumbline/internal/config"
 	"github.com/sroberts/plumbline/internal/report"
 	"github.com/sroberts/plumbline/internal/scanner"
 	"github.com/sroberts/plumbline/internal/scoring"
@@ -108,6 +109,20 @@ func makeAssessRunE(flags *assessFlags, stdout, stderr io.Writer) func(*cobra.Co
 			return errCannotRun(err)
 		}
 
+		// Load .plumbline.yml. Explicit --config errors on missing
+		// file; the default lookup at <path>/.plumbline.yml is
+		// optional and silently returns nil if absent.
+		var cfg *config.Config
+		switch {
+		case flags.configPath != "":
+			cfg, err = config.Load(flags.configPath)
+		default:
+			cfg, err = config.LoadDefault(path)
+		}
+		if err != nil {
+			return errCannotRun(err)
+		}
+
 		emitter := report.NewEventEmitter(stderr, flags.eventsFmt == "ndjson")
 
 		// Rewrite deprecated signal IDs (e.g. v1's l2.claude-md) to
@@ -120,12 +135,24 @@ func makeAssessRunE(flags *assessFlags, stdout, stderr io.Writer) func(*cobra.Co
 		includeIDs, _ := signals.ResolveIDs(flags.includeSignal, warnSink)
 		excludeIDs, _ := signals.ResolveIDs(flags.excludeSignal, warnSink)
 
+		// Merge config.signals.<id>.enabled=false into --exclude-signal.
+		// --include-signal takes precedence over disabled-in-config:
+		// an explicit pinned signal overrides the file's opt-out.
+		if cfg != nil && len(includeIDs) == 0 {
+			excludeIDs = append(excludeIDs, cfg.DisabledSignals()...)
+		}
+
+		scoringOpts := scoring.Options{MinConfidence: confLevel}
+		if cfg != nil && cfg.Thresholds != nil && cfg.Thresholds.Pass > 0 {
+			scoringOpts.PassThreshold = cfg.Thresholds.Pass
+		}
+
 		pipelineOpts := pipelineOptions{
 			IncludeSignal: includeIDs,
 			ExcludeSignal: excludeIDs,
 			LevelFilters:  flags.levelFilters,
 			FamilyFilters: flags.familyFilters,
-			Scoring:       scoring.Options{MinConfidence: confLevel},
+			Scoring:       scoringOpts,
 			Events:        emitter,
 			Debug:         flags.debug,
 			DebugStderr:   stderr,
