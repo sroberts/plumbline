@@ -7,10 +7,9 @@ import (
 	"sync"
 )
 
-// Aliases maps a deprecated (older signal-set) ID to the current ID
-// it was renamed or merged into. SPEC.md §8.2.5 is the contract:
-// renames go through a deprecation cycle with a `compat:` alias for
-// at least one minor version.
+// Alias records a deprecated-to-current signal-ID rename. SPEC.md
+// §8.2.5 is the contract: renames go through a deprecation cycle with
+// a `compat:` alias for at least one minor version.
 //
 // Each entry records:
 //   - From: the deprecated ID a caller may still pass
