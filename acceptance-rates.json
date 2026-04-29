@@ -1,0 +1,7 @@
+{
+  "schema": "plumbline/acceptance-rates/v1",
+  "policy": "Tracks merge-vs-reject rates for AI-generated PRs by category. Updated by a (future) scheduled job that classifies merged PRs from the last N days. Categories with acceptance rate <20% become candidates for blocking via L4 self-tuning (per the source paper, line 595–597).",
+  "categories": {},
+  "updated_at": "2026-04-28",
+  "next_update": "2026-05-05"
+}

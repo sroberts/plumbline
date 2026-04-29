@@ -9,14 +9,7 @@ import (
 	"regexp"
 
 	"github.com/sroberts/plumbline/internal/scanner"
-	"github.com/sroberts/plumbline/internal/workflows"
 )
-
-// fileExists reports whether the path can be read from the index.
-func fileExists(idx *scanner.RepoIndex, path string) bool {
-	_, err := idx.Read(path)
-	return err == nil
-}
 
 // readOrEmpty returns idx.Read(path) or empty bytes for ErrNotExist.
 func readOrEmpty(idx *scanner.RepoIndex, path string) []byte {
@@ -30,8 +23,7 @@ func readOrEmpty(idx *scanner.RepoIndex, path string) []byte {
 	return data
 }
 
-// anyByNameMatches reports whether any tracked file's basename matches
-// re.
+// anyByNameMatches reports whether any tracked file's basename matches re.
 func anyByNameMatches(idx *scanner.RepoIndex, re *regexp.Regexp) (string, bool) {
 	for base, paths := range idx.ByName {
 		if re.MatchString(base) {
@@ -49,15 +41,4 @@ func anyPathMatches(idx *scanner.RepoIndex, re *regexp.Regexp) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-// findWorkflow returns the first parsed workflow for which pred returns
-// true.
-func findWorkflow(idx *scanner.RepoIndex, pred func(*workflows.File) bool) *workflows.File {
-	for _, w := range idx.Workflows {
-		if pred(w) {
-			return w
-		}
-	}
-	return nil
 }

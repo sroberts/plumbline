@@ -36,8 +36,22 @@ jobs:
       - name: vet
         run: go vet ./...
 
+      - name: lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+          args: --timeout=5m
+
       - name: build
         run: go build ./...
 
       - name: test
-        run: go test -race -count=1 ./...
+        run: go test -race -count=1 -coverprofile=coverage.txt ./...
+
+      - name: coverage threshold
+        run: |
+          total=$(go tool cover -func=coverage.txt | awk '/^total:/ {gsub("%",""); print $3}')
+          echo "Total coverage: ${total}%"
+          # Floor: 60%. The aspirational target in codecov.yml is the
+          # same; we ratchet both up together as coverage improves.
+          awk -v t="$total" 'BEGIN { if (t+0 < 60) { exit 1 } }'

@@ -1,0 +1,55 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+  settings:
+    errcheck:
+      check-blank: false
+      check-type-assertions: false
+      # Common patterns where the unchecked error is idiomatic and
+      # not actionable.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (io.Writer).Write
+        - (*os.File).Close
+        - (io.Closer).Close
+        - encoding/json.Encoder.Encode
+
+    staticcheck:
+      # Disable the QF (quick-fix) check group. Those are stylistic
+      # rewrites (De Morgan's law, tagged switch) that don't represent
+      # bugs. Keep the SA (static analysis) and S (suggestion) checks.
+      checks:
+        - all
+        - -QF1001
+        - -QF1002
+        - -QF1003
+        - -QF1004
+        - -QF1005
+        - -QF1006
+        - -QF1007
+        - -QF1008
+        - -QF1009
+        - -QF1010
+        - -QF1011
+        - -QF1012
+
+  exclusions:
+    rules:
+      # Test files routinely call helpers whose returned errors are
+      # safe to ignore for the purposes of the test.
+      - path: _test\.go
+        linters:
+          - errcheck

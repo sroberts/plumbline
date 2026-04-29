@@ -388,5 +388,5 @@ type rawStep struct {
 }
 
 func (r rawStep) toStep() Step {
-	return Step{Name: r.Name, Uses: r.Uses, Run: r.Run, With: r.With, If: r.If}
+	return Step(r)
 }

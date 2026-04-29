@@ -1,0 +1,47 @@
+name: nightly-security-compliance
+
+# Scheduled compliance scan. govulncheck against current main + a
+# brief license-and-modules audit. Runs alongside the nightly
+# coverage suite so all heavy nightly checks share the same window.
+on:
+  schedule:
+    - cron: '0 6 * * *' # daily 06:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vuln-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: scan
+        run: govulncheck ./...
+
+  modules-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: go mod verify
+        run: go mod verify
+
+      - name: outdated direct dependencies
+        run: |
+          echo "## Direct dependencies" >> "$GITHUB_STEP_SUMMARY"
+          go list -m -u -f '{{if and (not .Indirect) .Update}}{{.Path}}: {{.Version}} -> {{.Update.Version}}{{end}}' all | tee -a "$GITHUB_STEP_SUMMARY"
