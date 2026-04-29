@@ -16,6 +16,7 @@ import (
 
 	"github.com/sroberts/plumbline/internal/buildinfo"
 	"github.com/sroberts/plumbline/internal/config"
+	"github.com/sroberts/plumbline/internal/plugin"
 	"github.com/sroberts/plumbline/internal/report"
 	"github.com/sroberts/plumbline/internal/scanner"
 	"github.com/sroberts/plumbline/internal/scoring"
@@ -49,6 +50,7 @@ type assessFlags struct {
 	levelFilters  []int
 	familyFilters []string
 	historyOut    string
+	pluginSpecs   []string
 }
 
 // bindAssessFlags registers the assess flag set on cmd. Used by the
@@ -76,6 +78,7 @@ func bindAssessFlags(cmd *cobra.Command, f *assessFlags) {
 	fs.IntSliceVar(&f.levelFilters, "level", nil, "Only run signals at level N (2-5). Repeatable.")
 	fs.StringSliceVar(&f.familyFilters, "family", nil, "Only run signals in family <name>. Repeatable.")
 	fs.StringVar(&f.historyOut, "history-out", "", "Append a one-line verdict summary (NDJSON) to this file. Useful for tracking maturity over time.")
+	fs.StringSliceVar(&f.pluginSpecs, "plugin", nil, "External signal plugin: <path> or <path>@<sha256>. Repeatable. See SPEC.md §13.")
 }
 
 // makeAssessRunE returns a cobra RunE closure that drives the assess
@@ -147,6 +150,16 @@ func makeAssessRunE(flags *assessFlags, stdout, stderr io.Writer) func(*cobra.Co
 			scoringOpts.PassThreshold = cfg.Thresholds.Pass
 		}
 
+		// Resolve --plugin specs to absolute paths (relative to the
+		// repo root being scanned, not pwd) and load each plugin
+		// before the scan. A plugin that fails to load fails the
+		// whole assess — silently dropping plugins would let a
+		// corrupted binary erase a CI gate's results.
+		extras, err := loadPlugins(cmd.Context(), flags.pluginSpecs, path)
+		if err != nil {
+			return errCannotRun(err)
+		}
+
 		pipelineOpts := pipelineOptions{
 			IncludeSignal: includeIDs,
 			ExcludeSignal: excludeIDs,
@@ -156,6 +169,7 @@ func makeAssessRunE(flags *assessFlags, stdout, stderr io.Writer) func(*cobra.Co
 			Events:        emitter,
 			Debug:         flags.debug,
 			DebugStderr:   stderr,
+			ExtraSignals:  extras,
 		}
 
 		// Mode selection per SPEC.md §4.
@@ -284,6 +298,11 @@ type pipelineOptions struct {
 	Events        *report.EventEmitter
 	Debug         bool
 	DebugStderr   io.Writer
+
+	// ExtraSignals are signals not registered in signals.Default —
+	// typically external plugins loaded for this run only. They run
+	// alongside built-ins through the same shouldRun filter.
+	ExtraSignals []signals.Signal
 }
 
 func (p *pipelineOptions) shouldRun(id string, level acmm.Level, family string) bool {
@@ -354,6 +373,9 @@ func runAssessWithIndex(ctx context.Context, path string, opts pipelineOptions) 
 	}
 
 	registered := signals.Default.All()
+	if len(opts.ExtraSignals) > 0 {
+		registered = append(registered, opts.ExtraSignals...)
+	}
 	if opts.Debug {
 		fmt.Fprintf(opts.DebugStderr, "[debug] scanned %s: %d files, %d workflows\n",
 			abs, len(idx.Files), len(idx.Workflows))
@@ -472,6 +494,33 @@ func validateSignalSet(v string) error {
 	default:
 		return fmt.Errorf("unknown --signal-set %q (want latest|%s|v1)", v, buildinfo.SignalSetVersion)
 	}
+}
+
+// loadPlugins parses each --plugin spec, loads the binary (verifying
+// its SHA-256 if pinned), and returns signals ready to register. The
+// repoRoot resolves so the plugin sees the same path the scanner
+// will walk.
+func loadPlugins(ctx context.Context, specs []string, repoRoot string) ([]signals.Signal, error) {
+	if len(specs) == 0 {
+		return nil, nil
+	}
+	abs, err := filepath.Abs(repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]signals.Signal, 0, len(specs))
+	for _, raw := range specs {
+		spec, err := plugin.ParseSpec(raw)
+		if err != nil {
+			return nil, err
+		}
+		p, err := plugin.Load(ctx, spec, abs)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, nil
 }
 
 func parseConfidence(s string) (acmm.Confidence, error) {
