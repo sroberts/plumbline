@@ -48,6 +48,13 @@ jobs:
       - name: test
         run: go test -race -count=1 -coverprofile=coverage.txt ./...
 
+      - name: perf budgets (non-race)
+        # Race detector adds ~10x allocations from synchronization
+        # bookkeeping, which would either force the budget so loose
+        # it stops catching real regressions or make the gate flake.
+        # Run perf-budget tests in a separate non-race invocation.
+        run: go test -count=1 -run "TestPerfBudget" ./internal/scanner/ ./internal/signals/
+
       - name: coverage threshold
         run: |
           total=$(go tool cover -func=coverage.txt | awk '/^total:/ {gsub("%",""); print $3}')
