@@ -18,7 +18,15 @@ type snapshotFlags struct {
 	outPath       string
 	configPath    string
 	minConfidence string
+	reproducible  bool
 }
+
+// reproducibleScannedAt is the sentinel timestamp written into a
+// reproducible snapshot in place of the real scan time. It is a valid
+// RFC3339 date-time (so the artifact still conforms to the verdict
+// schema) but a fixed value, so the artifact is byte-stable across runs
+// — the precondition for a CI drift gate (SPEC.md §9).
+const reproducibleScannedAt = "1970-01-01T00:00:00Z"
 
 // newSnapshotCmd builds the `snapshot` subcommand. It runs the standard
 // assess pipeline and writes a committable maturity-state artifact —
@@ -40,12 +48,20 @@ Notation) written to .plumbline.toon — a compact, diff-friendly artifact
 meant to be committed and tracked over time. Force json or yaml with
 --format for tools that prefer them.
 
-The artifact is a lossless re-encoding of 'assess --json': same fields,
-same values, different notation. Signals disabled in .plumbline.yml are
+The artifact is a re-encoding of 'assess --json': same fields, same
+notation-independent values. Signals disabled in .plumbline.yml are
 honored, exactly as in a normal assess.
 
+By default the artifact is *reproducible*: the volatile scanned_at and
+repo fields are normalized to stable values so re-running snapshot on an
+unchanged repo produces a byte-identical file. That makes it safe to
+commit and to guard with a CI drift gate (regenerate, then
+'git diff --exit-code .plumbline.toon'). Pass --reproducible=false to
+embed the live scan time and absolute path instead — useful when
+uploading a per-run build artifact rather than committing one.
+
 Examples:
-  # Write .plumbline.toon for the current repo.
+  # Write a committable .plumbline.toon for the current repo.
   plumbline snapshot
 
   # Force JSON, custom path.
@@ -53,6 +69,9 @@ Examples:
 
   # Emit YAML to stdout (e.g. to pipe elsewhere).
   plumbline snapshot --format yaml --out -
+
+  # A per-run artifact with the real scan time / path (not for committing).
+  plumbline snapshot --reproducible=false --out /tmp/run.toon
 
 Exit codes:
   0  artifact written
@@ -71,6 +90,7 @@ See also:
 	fs.StringVar(&flags.outPath, "out", "", "Output path. Default: .plumbline.<ext>. \"-\" = stdout.")
 	fs.StringVar(&flags.configPath, "config", "", "Override config path. Default: .plumbline.yml.")
 	fs.StringVar(&flags.minConfidence, "min-confidence", "low", "Minimum confidence to credit a signal: low|medium|high.")
+	fs.BoolVar(&flags.reproducible, "reproducible", true, "Normalize volatile fields (scanned_at, repo) so the artifact is byte-stable and committable. --reproducible=false embeds the live scan time and path.")
 	return cmd
 }
 
@@ -120,6 +140,17 @@ func makeSnapshotRunE(flags *snapshotFlags, stdout, stderr io.Writer) func(*cobr
 		})
 		if err != nil {
 			return errCannotRun(err)
+		}
+
+		// Normalize the two fields that vary by *when and where* the scan
+		// ran rather than by the codebase's maturity, so a committed
+		// artifact diffs cleanly and only when the assessment actually
+		// changes. repo → base name (stable across checkout paths);
+		// scanned_at → fixed sentinel. tool_version / signal_set_version
+		// are left intact — they are intrinsic to how signals were scored.
+		if flags.reproducible {
+			rpt.ScannedAt = reproducibleScannedAt
+			rpt.Repo = filepath.Base(rpt.Repo)
 		}
 
 		// With no explicit --out, drop the dotfile inside the scanned repo

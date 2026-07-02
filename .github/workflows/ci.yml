@@ -45,6 +45,27 @@ jobs:
       - name: build
         run: go build ./...
 
+      - name: maturity snapshot drift gate
+        # Regenerate the committed maturity artifact and fail if it is
+        # stale. This keeps .plumbline.toon an honest, reviewable record
+        # of the repo's own ACMM state: any change that moves the
+        # assessment shows up as a diff in the PR instead of silently
+        # rotting. The snapshot is reproducible by default (scanned_at /
+        # repo normalized), so an unchanged assessment regenerates
+        # byte-for-byte. To fix a failure: run `plumbline snapshot` (or
+        # `go run ./cmd/plumbline snapshot`) and commit the result.
+        #
+        # This is the L3 measurement loop applied to plumbline itself —
+        # the artifact is collected AND acted on (gated), not left to rot
+        # (the "dashboard graveyard" anti-pattern).
+        run: |
+          go build -o /tmp/plumbline ./cmd/plumbline
+          /tmp/plumbline snapshot --out .plumbline.toon .
+          if ! git diff --exit-code -- .plumbline.toon; then
+            echo "::error::.plumbline.toon is out of date — run 'plumbline snapshot' and commit the result"
+            exit 1
+          fi
+
       - name: test
         run: go test -race -count=1 -coverprofile=coverage.txt ./...
 

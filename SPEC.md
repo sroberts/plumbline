@@ -642,7 +642,28 @@ Map keys are emitted in sorted order in both, keeping the artifact deterministic
 - `--out <path>` overrides the destination; `--out -` streams to stdout and writes no file.
 - Signals disabled in `.plumbline.yml` are honored, exactly as in `assess`.
 
-`snapshot` is intentionally a thin wrapper over `assess --report`; the only behavioral difference is the repo-root default output path. Use `assess --report toon|yaml|json` when you want the same encodings with assess's full flag surface (filters, profiles, events).
+`snapshot` is intentionally a thin wrapper over `assess --report`; the behavioral differences are the repo-root default output path and reproducible-by-default output (below). Use `assess --report toon|yaml|json` when you want the same encodings with assess's full flag surface (filters, profiles, events) and the live, un-normalized report.
+
+#### Reproducibility & the CI drift gate
+
+A committed artifact is only useful if it diffs cleanly — a file that churns on every scan is noise, not signal. So `snapshot` is **reproducible by default**: the two fields that vary by *when and where* the scan ran, rather than by the codebase's maturity, are normalized to stable values:
+
+- `scanned_at` → a fixed RFC3339 sentinel (`1970-01-01T00:00:00Z`). Still schema-valid (the field is required and typed `date-time`), but constant.
+- `repo` → the repository directory's base name, not the absolute path (stable across `/home/user/...` locally vs `/home/runner/work/...` in CI).
+
+`tool_version` and `signal_set_version` are left intact — they are intrinsic to *how* signals were scored, so a change in either is a real change worth surfacing in the diff. Re-running `snapshot` on an unchanged repo therefore produces a byte-identical file. Pass `--reproducible=false` to embed the live scan time and absolute path (for a per-run artifact you upload rather than commit).
+
+This makes a **CI drift gate** a one-liner: regenerate the artifact and fail if it moved.
+
+```yaml
+- run: |
+    go build -o /tmp/plumbline ./cmd/plumbline
+    /tmp/plumbline snapshot --out .plumbline.toon .
+    git diff --exit-code -- .plumbline.toon \
+      || { echo "::error::.plumbline.toon is stale — run 'plumbline snapshot' and commit"; exit 1; }
+```
+
+Every change that moves plumbline's assessment then shows up as a reviewable diff in the PR instead of silently rotting. This is the L3 measurement loop applied to the repo itself — the artifact is collected **and acted on**, avoiding the *dashboard graveyard* anti-pattern (metrics gathered but never gating anything). plumbline runs exactly this gate on itself in `.github/workflows/ci.yml`.
 
 ## 9.5 Help & discoverability
 

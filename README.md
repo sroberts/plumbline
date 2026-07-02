@@ -133,6 +133,20 @@ jobs:
 
 `--signal-set v1` pins the rule-set version so the gate can't silently flip when plumbline upgrades. `plumbline help compatibility` documents what each version contains.
 
+### Track maturity over time (snapshot drift gate)
+
+Commit a `.plumbline.toon` snapshot and let CI keep it honest. The snapshot is reproducible by default (volatile `scanned_at` / `repo` fields normalized), so it only diffs when the assessment actually changes — turning every maturity shift into a reviewable line in the PR.
+
+```yaml
+# In your CI job, after building plumbline:
+- run: |
+    plumbline snapshot --out .plumbline.toon .
+    git diff --exit-code -- .plumbline.toon \
+      || { echo "::error::.plumbline.toon is stale — run 'plumbline snapshot' and commit"; exit 1; }
+```
+
+Regenerate locally with `plumbline snapshot` and commit the result. plumbline runs this gate on itself in [`.github/workflows/ci.yml`](.github/workflows/ci.yml); the committed [`.plumbline.toon`](.plumbline.toon) is its own current maturity state.
+
 ## Use plumbline from a coding agent
 
 Install the plumbline-usage guide into the location your tool expects. Pass `--target <name>` to pick:

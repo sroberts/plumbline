@@ -86,6 +86,28 @@ func TestSchemaConformance_AssessJSON(t *testing.T) {
 	validate(t, verdictSchema, []byte(out))
 }
 
+// The reproducible snapshot normalizes scanned_at and repo; this makes
+// sure those normalized values still satisfy the verdict schema (both
+// fields are required — scanned_at as date-time).
+func TestSchemaConformance_SnapshotJSON(t *testing.T) {
+	c := loadSchemaCompiler(t)
+	verdictSchema := compile(t, c, "test://plumbline/verdict")
+
+	dir := t.TempDir()
+	writeFile(t, dir, "CLAUDE.md", "# CLAUDE\n\n"+strings.Repeat("rule.\n", 25))
+
+	out := filepath.Join(dir, "snap.json")
+	code, _, errOut := runCLI(t, "snapshot", "--format", "json", "--out", out, dir)
+	if code != exitOK {
+		t.Fatalf("snapshot exit = %d (stderr: %s)", code, errOut)
+	}
+	body, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	validate(t, verdictSchema, body)
+}
+
 func TestSchemaConformance_InspectJSON(t *testing.T) {
 	c := loadSchemaCompiler(t)
 	signalResultSchema := compile(t, c, "test://plumbline/signal-result")

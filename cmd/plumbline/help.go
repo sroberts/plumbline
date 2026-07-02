@@ -182,6 +182,11 @@ in the repo root and track your ACMM level over time.
   plumbline snapshot --format yaml            # writes .plumbline.yaml
   plumbline snapshot --format json --out -    # JSON to stdout
 
+Reproducible by default (scanned_at / repo normalized), so a committed
+snapshot diffs only when the assessment changes. That makes a CI drift
+gate a one-liner: regenerate, then 'git diff --exit-code .plumbline.toon'.
+Pass --reproducible=false for a per-run artifact with the live scan time.
+
 ## NDJSON event stream ('--events ndjson')
 One JSON object per line emitted to stderr while the scan runs. Schema: 'plumbline schema event'.
 
