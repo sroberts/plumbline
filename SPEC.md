@@ -68,8 +68,8 @@ plumbline [global flags] <command> [args]
 |---|---|---|
 | `--cli` | auto | Force pure-CLI mode (no Bubble Tea, no ANSI cursor manipulation). Auto-set when stdout is not a TTY. Implied by `--json`, `--report`, `--events`, `--quiet`. |
 | `--tui` | auto | Force TUI even when stdout is not a TTY (rare; useful inside `script(1)` or for debugging). Mutually exclusive with `--cli`. |
-| `--json` | off | Print results as JSON to stdout. Implies `--cli`. Output schema: `plumbline schema verdict`. |
-| `--report <fmt>` | (none) | Emit a report file. `fmt` ∈ `markdown`, `json`, `sarif`, `toon`, `yaml`. Implies `--cli`. |
+| `--json` | off | Print results as JSON to stdout — a shortcut for `--report json`. Implies `--cli`. Output schema: `plumbline schema verdict`. |
+| `--report <fmt>` | `toon` | Pick the report format. `fmt` ∈ `toon`, `json`, `yaml`, `markdown`, `sarif`. TOON is also the default CLI output when `--report`/`--json` are omitted. Implies `--cli`. |
 | `--out <path>` | `-` | Report destination. `-` = stdout. |
 | `--events <fmt>` | off | Stream scan progress events to **stderr**. `fmt` ∈ `ndjson`, `text`. Implies `--cli`. Schema: `plumbline schema event`. |
 | `--quiet` / `-q` | off | Suppress banner, progress, and trailing hints. Errors still go to stderr. Implies `--cli`. |
@@ -440,7 +440,7 @@ with a target.
 
 CLI mode is the **non-interactive, machine-friendly** interface. It is what runs in CI and what an LLM agent invokes through a tool-use harness. It produces three streams:
 
-- **stdout** — the result, in the format requested by `--json`, `--report`, or the default human-readable text.
+- **stdout** — the result, in the format requested by `--json` or `--report`, or the default TOON encoding when neither is set.
 - **stderr** — progress events (when `--events` is set), warnings, errors, and trailing hints.
 - **exit code** — verdict gate result (see §4).
 
@@ -451,7 +451,7 @@ CLI mode never repositions the cursor, never clears the screen, never reads from
 | TUI screen / action | CLI equivalent |
 |---|---|
 | Scan progress (streaming dots and spinner) | `plumbline assess --events ndjson` (events stream to stderr; final result to stdout) |
-| Results overview (level bars + next-level gap) | `plumbline assess` — default human text, or `--json` for machine output |
+| Results overview (level bars + next-level gap) | `plumbline assess` — default TOON output, or `--json` for JSON |
 | Detail screen for a single signal | `plumbline inspect <signal-id>` |
 | `e` — export markdown report | `plumbline assess --report markdown --out report.md` |
 | `s` — switch to signals list | `plumbline signals --level 3 --family compliance` |
@@ -459,30 +459,23 @@ CLI mode never repositions the cursor, never clears the screen, never reads from
 | Filter / search within results | `--include-signal`, `--exclude-signal`, `--level`, `--family` |
 | `o` — open file in `$EDITOR` | (omitted; CLI emits absolute paths so the caller can open them itself) |
 
-### 8.2.2 Default text output (`plumbline assess`)
+### 8.2.2 Default output: TOON (`plumbline assess`)
 
-Identical information to the TUI results screen, rendered statically:
+In CLI mode `plumbline assess` emits **TOON** (Token-Oriented Object Notation) by default — the same compact, diff-friendly, lossless encoding of the full `Report` produced by `--report toon` (see §9). It is written to stdout unless `--out` redirects it. JSON and YAML are the alternatives, selected with `--json` (a shortcut for `--report json`) or `--report yaml`; `markdown` and `sarif` emit summaries rather than the full data.
 
 ```
-plumbline · /path/to/repo
-─────────────────────────────────────────────────
-Assessed level: 3 (Measured)
-
-  L2 Instructed         100%   5/5    PASS
-  L3 Measured            72%   6/8    PASS
-  L4 Adaptive            20%   1/5    NEXT
-  L5 Self-Sustaining      0%   0/4    -
-
-Next-level gap (to reach L4):
-  · l4.self-modifying-config   no workflow writes back to repo
-  · l4.auto-triage             no sub-daily scheduled workflow
-  · l4.threshold-block         no metric-driven workflow conditional
-
-Hint: `plumbline inspect l4.self-modifying-config` for the fix recipe.
-Hint: `plumbline assess --json` for machine-readable output.
+schema: plumbline/v1
+repo: /path/to/repo
+verdict:
+  level: 3
+  name: Measured
+  next_gap[3]: l4.auto-triage,l4.self-modifying-config,l4.threshold-block
+signals[19]{id,level,status,score,confidence}:
+  l2.agent-instructions,2,found,1,high
+  ...
 ```
 
-The trailing `Hint:` lines are deliberate. They give an LLM agent the next correct command to run without needing to consult external documentation.
+The level bars, per-level pass badges, and `Hint:` lines from earlier releases are the **TUI** results screen (see §8.2.1); on a terminal you get that interactive view, while pipes and CI get TOON. A consumer that wants the verdict level reads `verdict.level`; the actionable next steps are `verdict.next_gap`.
 
 ### 8.2.3 Detail output (`plumbline inspect <signal-id>`)
 
@@ -697,10 +690,10 @@ Description:
   Use --cli to force non-interactive output, --tui to force the TUI.
 
 Flags:
-  --json                 Emit JSON to stdout. Implies --cli.
-                         Schema: `plumbline schema verdict`.
-  --report fmt           Write a report file. fmt: markdown|json|sarif.
-                         Implies --cli.
+  --json                 Emit JSON to stdout (shortcut for --report json).
+                         Implies --cli. Schema: `plumbline schema verdict`.
+  --report fmt           Report format. fmt: toon|json|yaml|markdown|sarif.
+                         Default CLI output is toon. Implies --cli.
   --out path             Report destination. "-" = stdout. Default "-".
   --events fmt           Stream progress events to stderr.
                          fmt: ndjson|text. Schema: `plumbline schema event`.

@@ -33,10 +33,10 @@ func TestRoot_NoSubcommandRunsAssess(t *testing.T) {
 	}
 }
 
-// TestRoot_BareInvocationEmitsBriefText verifies that `plumbline` with
-// no args and no --json (and no TTY in the test environment) prints
-// the brief text summary, not the cobra usage page.
-func TestRoot_BareInvocationEmitsBriefText(t *testing.T) {
+// TestRoot_BareInvocationEmitsTOON verifies that `plumbline` with no
+// args and no --json (and no TTY in the test environment) emits the
+// default TOON report, not the cobra usage page.
+func TestRoot_BareInvocationEmitsTOON(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "CLAUDE.md", substantiveAgentInstructions())
 
@@ -44,9 +44,11 @@ func TestRoot_BareInvocationEmitsBriefText(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("exit = %d, want 0 (stderr: %s)", code, errOut)
 	}
-	for _, want := range []string{"plumbline ·", "Assessed level:", "L2 Instructed"} {
+	// TOON markers: top-level scalar keys and the length-declared
+	// signals array header. This is the same output as '--report toon'.
+	for _, want := range []string{"schema: plumbline/v1", "verdict:", "signals["} {
 		if !strings.Contains(out, want) {
-			t.Errorf("bare invocation stdout missing %q. Got:\n%s", want, out)
+			t.Errorf("bare invocation stdout missing TOON marker %q. Got:\n%s", want, out)
 		}
 	}
 }
