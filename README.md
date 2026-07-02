@@ -148,6 +148,18 @@ Commit a `.plumbline.toon` snapshot and let CI keep it honest. The snapshot is r
 
 Regenerate locally with `plumbline snapshot` and commit the result. plumbline runs this gate on itself in [`.github/workflows/ci.yml`](.github/workflows/ci.yml); the committed [`.plumbline.toon`](.plumbline.toon) is its own current maturity state.
 
+### Comment the maturity delta on merge (`plumbline diff`)
+
+Because the snapshot is re-readable, `plumbline diff` compares two artifacts and reports the level move plus which signals changed status:
+
+```bash
+git show origin/main:.plumbline.toon > /tmp/base.toon   # base — already committed
+plumbline snapshot --out /tmp/head.toon .               # head — one scan
+plumbline diff /tmp/base.toon /tmp/head.toon            # → PR-comment-ready delta
+```
+
+The base is read from the committed artifact, so a "how did this PR move maturity?" comment scans only the head — no second full assessment. plumbline does this on every merged PR in [`.github/workflows/verdict-delta.yml`](.github/workflows/verdict-delta.yml).
+
 ## Use plumbline from a coding agent
 
 Install the plumbline-usage guide into the location your tool expects. Pass `--target <name>` to pick:

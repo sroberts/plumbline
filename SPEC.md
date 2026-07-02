@@ -55,6 +55,7 @@ plumbline [global flags] <command> [args]
 |---|---|---|
 | `plumbline assess [path]` | Scan a repo and report its ACMM level. Defaults to `.`. | yes (default) |
 | `plumbline snapshot [path]` | Scan a repo and write a committable maturity-state artifact — `.plumbline.toon` by default (or `json`/`yaml` via `--format`). Sugar over `assess --report` with a repo-root default output path. | no |
+| `plumbline diff <old> <new>` | Compare two snapshot artifacts (`snapshot`/`--report` output, format inferred from extension) and report the verdict-level move and per-signal status changes. `--json` for a machine-readable delta. Reads back the artifacts `snapshot` writes — the encoder's inverse. | no |
 | `plumbline inspect <signal-id> [path]` | Run a scan and print the **detail view** for a single signal — evidence, status, fix recipe. CLI equivalent of opening the TUI's detail screen. | no |
 | `plumbline signals` | List every signal the tool knows how to detect. Filterable by `--level`, `--family`. Supports `--json`. | no |
 | `plumbline explain <signal-id>` | Print a signal's description, detection rule, and rationale. **Static** — does not scan a repo. | no |
@@ -657,6 +658,18 @@ This makes a **CI drift gate** a one-liner: regenerate the artifact and fail if 
 ```
 
 Every change that moves plumbline's assessment then shows up as a reviewable diff in the PR instead of silently rotting. This is the L3 measurement loop applied to the repo itself — the artifact is collected **and acted on**, avoiding the *dashboard graveyard* anti-pattern (metrics gathered but never gating anything). plumbline runs exactly this gate on itself in `.github/workflows/ci.yml`.
+
+### `plumbline diff`
+
+Because the snapshot is a *lossless, re-readable* artifact, plumbline can decode it back into a `Report` — the TOON/YAML/JSON encoders each have an inverse (`report.DecodeReport`). `plumbline diff <old> <new>` uses that to compare two snapshots and report:
+
+- the verdict-level move (`L2 (Instructed) ↑ L3 (Measured)`, or "unchanged"),
+- the signals that changed **status** (`l3.coverage-gate: missing → found`, plus catalog add/remove), and
+- the new per-level scores.
+
+Formats are inferred per file from the extension (`.toon`/`.json`/`.yaml`), so a TOON base diffs cleanly against a JSON head. `--json` emits the delta structurally.
+
+The point is cheap maturity deltas in CI. The **base** verdict is already committed as `.plumbline.toon` (the drift gate keeps it current), so a "how did this PR move maturity?" comment needs to scan only the **head** and diff it against `git show <base>:.plumbline.toon` — no base checkout, no second full assessment. plumbline's `verdict-delta.yml` does exactly this on every merged PR, and only nudges the author to update `CLAUDE.md` when the level actually changed. Falls back to a level-only note when the base commit predates the committed artifact.
 
 ## 9.5 Help & discoverability
 

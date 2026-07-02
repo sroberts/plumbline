@@ -194,6 +194,18 @@ snapshot diffs only when the assessment changes. That makes a CI drift
 gate a one-liner: regenerate, then 'git diff --exit-code .plumbline.toon'.
 Pass --reproducible=false for a per-run artifact with the live scan time.
 
+## Maturity delta ('plumbline diff')
+'plumbline diff <old> <new>' reads two snapshot artifacts back (the encoders
+are invertible) and reports the level move plus which signals changed status.
+Formats are inferred from the file extension; --json emits the delta.
+
+  plumbline diff base.toon head.toon           # PR-comment-ready summary
+  plumbline diff base.toon head.json --json    # machine-readable delta
+
+Cheap CI deltas: the base verdict is already committed as .plumbline.toon, so a
+"how did this PR move maturity?" comment scans only the head and diffs against
+'git show <base>:.plumbline.toon' — no second full assess.
+
 ## NDJSON event stream ('--events ndjson')
 One JSON object per line emitted to stderr while the scan runs. Schema: 'plumbline schema event'.
 
