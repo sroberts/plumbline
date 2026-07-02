@@ -1,0 +1,229 @@
+ci_system: github-actions
+repo: plumbline
+scanned_at: "1970-01-01T00:00:00Z"
+schema: plumbline/v1
+signal_set_version: v2
+signals[21]:
+  - confidence: medium
+    evidence[1]{excerpt,path}:
+      "# CLAUDE.md\n\nThis file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.\n\n## Project status\n\nPlumbline is in a pre-im…",CLAUDE.md
+    family: instructions
+    id: l2.agent-instructions
+    level: 2
+    method: content-regex
+    notes[1]: CLAUDE.md has a heading and 28 non-blank lines (≥20)
+    score: 1
+    status: found
+    title: Agent instructions present (CLAUDE.md / AGENTS.md / copilot-instructions / etc.)
+  - confidence: high
+    evidence[1]{path}:
+      .gitmessage
+    family: templates
+    id: l2.commit-rules
+    level: 2
+    method: filename
+    score: 1
+    status: found
+    title: Commit-message conventions encoded in repo
+  - confidence: medium
+    evidence[1]{excerpt,path}:
+      "# Contributing\n\nWelcome. This guide is the canonical source for how PRs get reviewed\nand merged in this repository — both for human contributors and for\nAI co…",CONTRIBUTING.md
+    family: instructions
+    id: l2.contributor-guide
+    level: 2
+    method: content-regex
+    score: 1
+    status: found
+    title: Contributor / development guide present and substantive
+  - confidence: medium
+    evidence[1]{excerpt,path}:
+      "## Summary\n\n<!-- One paragraph: what changed and why. -->\n\n## Test plan\n\n- [ ] Unit tests cover the change\n- [ ] Lint and type-check pass\n- [ ] Manual smoke che…",.github/pull_request_template.md
+    family: templates
+    id: l2.pr-template
+    level: 2
+    method: content-regex
+    notes[1]: 5 markdown checkboxes (≥3)
+    score: 1
+    status: found
+    title: PR template with structured checklist
+  - confidence: high
+    evidence[1]{path}:
+      acceptance-rates.json
+    family: monitoring
+    id: l3.acceptance-tracking
+    level: 3
+    method: filename
+    score: 1
+    status: found
+    title: Tracked metrics file (acceptance rates / auto-qa-tuning)
+  - confidence: medium
+    evidence[1]{path}:
+      .github/workflows/ci.yml
+    family: ci-gate
+    id: l3.build-lint-gate
+    level: 3
+    method: ast
+    score: 1
+    status: found
+    title: CI workflow runs build and lint on push or PR
+  - confidence: medium
+    evidence[1]{excerpt,path}:
+      "coverage:\n  status:\n    project:\n      default:\n        target: 60%\n        threshold: 1%\n    patch:\n      default:\n        target: 60%\n        threshold: 1%\n\n#",codecov.yml
+    family: coverage
+    id: l3.coverage-gate
+    level: 3
+    method: content-regex
+    score: 1
+    status: found
+    title: Coverage gate fails CI below a threshold
+  - confidence: medium
+    evidence[1]{path}:
+      .github/workflows/canary-repos.yml
+    family: coverage
+    id: l3.coverage-suite
+    level: 3
+    method: ast
+    score: 1
+    status: found
+    title: Scheduled (cron) coverage suite
+  - confidence: low
+    family: monitoring
+    fix_hint: "Wire in an error-monitoring SDK (Sentry, OpenTelemetry, or equivalent). Without runtime error signals, AI agents can't distinguish 'this fix worked' from 'this fix silently broke prod.'"
+    id: l3.error-monitoring
+    level: 3
+    method: content-regex
+    notes[2]: no Sentry / OpenTelemetry / Bugsnag / similar dependency found,"low confidence — only checks dependency manifests, not runtime config"
+    score: 0
+    status: missing
+    title: Error-monitoring SDK declared in dependency manifest
+  - confidence: medium
+    evidence[1]{path}:
+      flaky-tests.json
+    family: compliance
+    id: l3.flaky-analysis
+    level: 3
+    method: filename
+    score: 1
+    status: found
+    title: Flaky-test tracking workflow or report file
+  - confidence: medium
+    evidence[1]{path}:
+      .github/workflows/coverage-nightly.yml
+    family: compliance
+    id: l3.nightly-compliance
+    level: 3
+    method: ast
+    score: 1
+    status: found
+    title: Scheduled compliance / a11y / perf / security suite
+  - confidence: low
+    family: feedback
+    fix_hint: "Add a lightweight user-feedback channel: an NPS / CSAT survey component (e.g. web/src/hooks/useNPSSurvey.ts), or a .github/ISSUE_TEMPLATE/feedback.md so users can report what shipped wrong."
+    id: l3.user-feedback
+    level: 3
+    method: filename
+    notes[2]: no NPS / survey component or feedback issue template found,low confidence — name match only
+    score: 0
+    status: missing
+    title: User-feedback / NPS / survey channel wired up
+  - confidence: medium
+    family: automation
+    fix_hint: Add a workflow on a sub-daily cron (e.g. '*/15 * * * *') that runs 'gh issue list' or hits /issues via actions/github-script and triages new issues automatically.
+    id: l4.auto-triage
+    level: 4
+    method: ast
+    notes[1]: no sub-daily scheduled workflow that touches the GitHub Issues API
+    score: 0
+    status: missing
+    title: Scheduled workflow that triages issues automatically
+  - confidence: high
+    evidence[1]{path}:
+      .github/workflows/ci.yml
+    family: automation
+    id: l4.error-recovery
+    level: 4
+    method: ast
+    score: 1
+    status: found
+    title: Workflow retries failures with backoff or continue-on-error
+  - confidence: high
+    evidence[1]{path}:
+      .github/workflows/coverage-ratchet.yml
+    family: automation
+    id: l4.self-modifying-config
+    level: 4
+    method: ast
+    score: 1
+    status: found
+    title: Workflow writes back to the repo (PR or push)
+  - confidence: medium
+    evidence[1]{path}:
+      .github/workflows/ci.yml
+    family: automation
+    id: l4.threshold-block
+    level: 4
+    method: content-regex
+    score: 1
+    status: found
+    title: Workflow conditional reads metrics and gates on a threshold
+  - confidence: medium
+    evidence[1]{path}:
+      .devcontainer/devcontainer.json
+    family: automation
+    id: l4.worktree-agents
+    level: 4
+    method: filename
+    score: 1
+    status: found
+    title: Concurrent AI agent runner / devcontainer / worktree config
+  - confidence: medium
+    evidence[1]{path}:
+      .github/workflows/docs-signals.yml
+    family: automation
+    id: l5.docs-from-prs
+    level: 5
+    method: content-regex
+    score: 1
+    status: found
+    title: Documentation updates triggered by PR events
+  - confidence: medium
+    family: automation
+    fix_hint: "Wire issues to PRs: a workflow on `issues: [opened, labeled]` that calls a fix-generating script (or hands the issue to an AI agent) and then opens a PR via peter-evans/create-pull-request. This is the L5 unlock — community steers, AI implements."
+    id: l5.issue-to-pr
+    level: 5
+    method: ast
+    notes[1]: "no workflow with issues:[opened|labeled] trigger that opens a PR"
+    score: 0
+    status: missing
+    title: Issues open PRs automatically
+  - confidence: medium
+    evidence[1]{path}:
+      .github/workflows/canary-repos.yml
+    family: automation
+    id: l5.multi-repo-orchestration
+    level: 5
+    method: content-regex
+    score: 1
+    status: found
+    title: Workflow fans out across multiple repositories
+  - confidence: medium
+    evidence[1]{path}:
+      .github/workflows/verdict-delta.yml
+    family: automation
+    id: l5.self-improvement
+    level: 5
+    method: content-regex
+    score: 1
+    status: found
+    title: Workflow updates instruction files based on merged PRs
+tool_version: dev
+verdict:
+  level: 5
+  level_scores:
+    "2": 1
+    "3": 0.75
+    "4": 0.8
+    "5": 0.75
+  min_confidence_applied: low
+  name: Self-Sustaining
+  next_gap[0]:

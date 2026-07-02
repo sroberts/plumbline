@@ -34,6 +34,10 @@ plumbline --json --events ndjson 2>events.log >verdict.json
 # CI gate: fail if not at level 3.
 plumbline --fail-below 3 --quiet
 
+# Write a committable maturity-state artifact (.plumbline.toon by default).
+plumbline snapshot
+plumbline snapshot --format yaml   # or json
+
 # Drill into one signal's status, evidence, and fix recipe.
 plumbline inspect l2.agent-instructions
 
@@ -77,7 +81,11 @@ Plumbline mostly follows Table 2 of the paper, but a few signals are intentional
 | `--json` | Machine-readable verdict; LLM tool harnesses |
 | `--report markdown --out maturity.md` | Committable report |
 | `--report sarif --out plumbline.sarif` | GitHub code-scanning |
+| `snapshot` → `.plumbline.toon` | Committable maturity-state artifact (TOON; `--format json\|yaml` to force) |
+| `--report toon` / `--report yaml` | Same report as `--report json`, in TOON / YAML notation |
 | `--events ndjson` on stderr | Per-signal progress events while scanning |
+
+`--report json`, `toon`, and `yaml` are lossless re-encodings of the same report — same fields, different notation. [TOON](https://github.com/toon-format/spec) is compact and token-efficient, which is why it's the default `snapshot` format.
 
 Schemas are published via `plumbline schema {verdict, signal-result, event, config}` (draft 2020-12).
 
@@ -124,6 +132,20 @@ jobs:
 ```
 
 `--signal-set v1` pins the rule-set version so the gate can't silently flip when plumbline upgrades. `plumbline help compatibility` documents what each version contains.
+
+### Track maturity over time (snapshot drift gate)
+
+Commit a `.plumbline.toon` snapshot and let CI keep it honest. The snapshot is reproducible by default (volatile `scanned_at` / `repo` fields normalized), so it only diffs when the assessment actually changes — turning every maturity shift into a reviewable line in the PR.
+
+```yaml
+# In your CI job, after building plumbline:
+- run: |
+    plumbline snapshot --out .plumbline.toon .
+    git diff --exit-code -- .plumbline.toon \
+      || { echo "::error::.plumbline.toon is stale — run 'plumbline snapshot' and commit"; exit 1; }
+```
+
+Regenerate locally with `plumbline snapshot` and commit the result. plumbline runs this gate on itself in [`.github/workflows/ci.yml`](.github/workflows/ci.yml); the committed [`.plumbline.toon`](.plumbline.toon) is its own current maturity state.
 
 ## Use plumbline from a coding agent
 

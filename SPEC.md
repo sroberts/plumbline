@@ -54,6 +54,7 @@ plumbline [global flags] <command> [args]
 | Command | Purpose | TUI? |
 |---|---|---|
 | `plumbline assess [path]` | Scan a repo and report its ACMM level. Defaults to `.`. | yes (default) |
+| `plumbline snapshot [path]` | Scan a repo and write a committable maturity-state artifact — `.plumbline.toon` by default (or `json`/`yaml` via `--format`). Sugar over `assess --report` with a repo-root default output path. | no |
 | `plumbline inspect <signal-id> [path]` | Run a scan and print the **detail view** for a single signal — evidence, status, fix recipe. CLI equivalent of opening the TUI's detail screen. | no |
 | `plumbline signals` | List every signal the tool knows how to detect. Filterable by `--level`, `--family`. Supports `--json`. | no |
 | `plumbline explain <signal-id>` | Print a signal's description, detection rule, and rationale. **Static** — does not scan a repo. | no |
@@ -68,7 +69,7 @@ plumbline [global flags] <command> [args]
 | `--cli` | auto | Force pure-CLI mode (no Bubble Tea, no ANSI cursor manipulation). Auto-set when stdout is not a TTY. Implied by `--json`, `--report`, `--events`, `--quiet`. |
 | `--tui` | auto | Force TUI even when stdout is not a TTY (rare; useful inside `script(1)` or for debugging). Mutually exclusive with `--cli`. |
 | `--json` | off | Print results as JSON to stdout. Implies `--cli`. Output schema: `plumbline schema verdict`. |
-| `--report <fmt>` | (none) | Emit a report file. `fmt` ∈ `markdown`, `json`, `sarif`. Implies `--cli`. |
+| `--report <fmt>` | (none) | Emit a report file. `fmt` ∈ `markdown`, `json`, `sarif`, `toon`, `yaml`. Implies `--cli`. |
 | `--out <path>` | `-` | Report destination. `-` = stdout. |
 | `--events <fmt>` | off | Stream scan progress events to **stderr**. `fmt` ∈ `ndjson`, `text`. Implies `--cli`. Schema: `plumbline schema event`. |
 | `--quiet` / `-q` | off | Suppress banner, progress, and trailing hints. Errors still go to stderr. Implies `--cli`. |
@@ -622,6 +623,47 @@ Mirrors the TUI results screen but as a static document, suitable for committing
 ### `--report sarif`
 
 Each `Missing` signal becomes a SARIF result with severity `note` and `ruleId == signal.ID()`. This lets GitHub's code-scanning tab surface plumbline findings inline on PRs.
+
+### `--report toon` / `--report yaml`
+
+Lossless re-encodings of the same `Report` structure emitted by `--report json`. All three are produced from one generic tree (the report is marshaled to JSON, then re-decoded), so field names, `omitempty` elisions, and values are identical across the three notations — only the surface syntax differs.
+
+- **TOON** ([Token-Oriented Object Notation](https://github.com/toon-format/spec)) is the compact, LLM-token-efficient default for the `snapshot` artifact: uniform arrays of objects collapse to a CSV-like table under a single field header, primitive arrays render inline, and every array declares its length so a consumer can verify completeness.
+- **YAML** is offered as a "force" format for tooling that prefers it.
+
+Map keys are emitted in sorted order in both, keeping the artifact deterministic and diff-friendly.
+
+### `plumbline snapshot`
+
+`snapshot` runs the standard assess pipeline and writes the full report as a **committable maturity-state artifact**. It is the low-friction path to the file teams commit and track over time:
+
+- Default format **TOON**, default output **`<repo>/.plumbline.toon`** (a repo-root dotfile, not a file in the caller's CWD).
+- `--format toon|json|yaml` selects the notation and the default extension (`.plumbline.json`, `.plumbline.yaml`).
+- `--out <path>` overrides the destination; `--out -` streams to stdout and writes no file.
+- Signals disabled in `.plumbline.yml` are honored, exactly as in `assess`.
+
+`snapshot` is intentionally a thin wrapper over `assess --report`; the behavioral differences are the repo-root default output path and reproducible-by-default output (below). Use `assess --report toon|yaml|json` when you want the same encodings with assess's full flag surface (filters, profiles, events) and the live, un-normalized report.
+
+#### Reproducibility & the CI drift gate
+
+A committed artifact is only useful if it diffs cleanly — a file that churns on every scan is noise, not signal. So `snapshot` is **reproducible by default**: the two fields that vary by *when and where* the scan ran, rather than by the codebase's maturity, are normalized to stable values:
+
+- `scanned_at` → a fixed RFC3339 sentinel (`1970-01-01T00:00:00Z`). Still schema-valid (the field is required and typed `date-time`), but constant.
+- `repo` → the repository directory's base name, not the absolute path (stable across `/home/user/...` locally vs `/home/runner/work/...` in CI).
+
+`tool_version` and `signal_set_version` are left intact — they are intrinsic to *how* signals were scored, so a change in either is a real change worth surfacing in the diff. Re-running `snapshot` on an unchanged repo therefore produces a byte-identical file. Pass `--reproducible=false` to embed the live scan time and absolute path (for a per-run artifact you upload rather than commit).
+
+This makes a **CI drift gate** a one-liner: regenerate the artifact and fail if it moved.
+
+```yaml
+- run: |
+    go build -o /tmp/plumbline ./cmd/plumbline
+    /tmp/plumbline snapshot --out .plumbline.toon .
+    git diff --exit-code -- .plumbline.toon \
+      || { echo "::error::.plumbline.toon is stale — run 'plumbline snapshot' and commit"; exit 1; }
+```
+
+Every change that moves plumbline's assessment then shows up as a reviewable diff in the PR instead of silently rotting. This is the L3 measurement loop applied to the repo itself — the artifact is collected **and acted on**, avoiding the *dashboard graveyard* anti-pattern (metrics gathered but never gating anything). plumbline runs exactly this gate on itself in `.github/workflows/ci.yml`.
 
 ## 9.5 Help & discoverability
 
