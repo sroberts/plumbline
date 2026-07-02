@@ -166,6 +166,22 @@ plumbline emits results in several formats. Schemas at 'plumbline schema <name>'
 ## Markdown report ('--report markdown')
 'plumbline assess --report markdown --out maturity.md' — committable summary.
 
+## SARIF ('--report sarif')
+'plumbline assess --report sarif' — GitHub code-scanning findings for missing/partial signals.
+
+## Report formats ('--report json|markdown|sarif|toon|yaml')
+'--report' writes the full Report in any of these notations to '--out' ("-" = stdout).
+json, toon, and yaml are lossless re-encodings of the same data; markdown and sarif are summaries.
+
+## Maturity snapshot ('plumbline snapshot')
+'plumbline snapshot' writes a committable maturity-state artifact — '.plumbline.toon' by default
+(Token-Oriented Object Notation: compact and diff-friendly), or json/yaml via '--format'. Drop it
+in the repo root and track your ACMM level over time.
+
+  plumbline snapshot                          # writes .plumbline.toon
+  plumbline snapshot --format yaml            # writes .plumbline.yaml
+  plumbline snapshot --format json --out -    # JSON to stdout
+
 ## NDJSON event stream ('--events ndjson')
 One JSON object per line emitted to stderr while the scan runs. Schema: 'plumbline schema event'.
 

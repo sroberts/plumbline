@@ -58,7 +58,7 @@ type assessFlags struct {
 func bindAssessFlags(cmd *cobra.Command, f *assessFlags) {
 	fs := cmd.Flags()
 	fs.BoolVar(&f.asJSON, "json", false, "Emit JSON to stdout. Implies --cli. Schema: 'plumbline schema verdict'.")
-	fs.StringVar(&f.reportFmt, "report", "", "Write a report file. fmt: markdown|json|sarif. Implies --cli.")
+	fs.StringVar(&f.reportFmt, "report", "", "Write a report file. fmt: markdown|json|sarif|toon|yaml. Implies --cli.")
 	fs.StringVar(&f.outPath, "out", "-", "Report destination. \"-\" = stdout.")
 	fs.StringVar(&f.eventsFmt, "events", "", "Stream progress events to stderr. fmt: ndjson|text. Schema: 'plumbline schema event'.")
 	fs.BoolVarP(&f.quiet, "quiet", "q", false, "Suppress banners, progress, and trailing hints. Implies --cli.")
@@ -92,8 +92,8 @@ func makeAssessRunE(flags *assessFlags, stdout, stderr io.Writer) func(*cobra.Co
 		if len(flags.includeSignal) > 0 && len(flags.excludeSignal) > 0 {
 			return errCannotRun(errors.New("--include-signal and --exclude-signal are mutually exclusive"))
 		}
-		if flags.reportFmt != "" && flags.reportFmt != "json" && flags.reportFmt != "markdown" && flags.reportFmt != "sarif" {
-			return errCannotRun(fmt.Errorf("invalid --report %q (want json|markdown|sarif)", flags.reportFmt))
+		if flags.reportFmt != "" && !isReportFormat(flags.reportFmt) {
+			return errCannotRun(fmt.Errorf("invalid --report %q (want json|markdown|sarif|toon|yaml)", flags.reportFmt))
 		}
 		if flags.eventsFmt != "" && flags.eventsFmt != "ndjson" && flags.eventsFmt != "text" {
 			return errCannotRun(fmt.Errorf("invalid --events %q (want ndjson|text)", flags.eventsFmt))
@@ -277,6 +277,7 @@ Exit codes:
   3  configuration error
 
 See also:
+  plumbline snapshot         write a committable .plumbline.toon artifact
   plumbline inspect          drill into one signal's evidence
   plumbline signals          list every signal the tool detects
   plumbline help scoring     how levels and the no-skip rule are computed
@@ -439,6 +440,16 @@ func runAssessWithIndex(ctx context.Context, path string, opts pipelineOptions) 
 	}, idx, nil
 }
 
+// isReportFormat reports whether s names a format writeReport can emit.
+func isReportFormat(s string) bool {
+	switch s {
+	case "markdown", "json", "sarif", "toon", "yaml":
+		return true
+	default:
+		return false
+	}
+}
+
 // writeReport serializes the report in the requested format and writes
 // it to outPath ("-" = stdout).
 func writeReport(r acmm.Report, format, outPath string, stdout io.Writer) error {
@@ -460,6 +471,18 @@ func writeReport(r acmm.Report, format, outPath string, stdout io.Writer) error 
 			return err
 		}
 		data = append(data, '\n')
+	case "toon":
+		var err error
+		data, err = report.TOON(r)
+		if err != nil {
+			return err
+		}
+	case "yaml":
+		var err error
+		data, err = report.YAML(r)
+		if err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("unknown report format: %s", format)
 	}
