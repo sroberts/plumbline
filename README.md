@@ -22,8 +22,8 @@ Pre-built binaries (darwin / linux × amd64 / arm64) ship on the [Releases](http
 # Bare invocation: opens the Bubble Tea TUI on a terminal.
 plumbline
 
-# Pipe / CI: brief text summary.
-plumbline | tee maturity.txt
+# Pipe / CI: full report as TOON (compact, diff-friendly).
+plumbline | tee maturity.toon
 
 # Machine-readable verdict for an LLM tool harness.
 plumbline --json
@@ -78,14 +78,15 @@ Plumbline mostly follows Table 2 of the paper, but a few signals are intentional
 | Mode | Use case |
 |---|---|
 | TUI (default on a terminal) | Interactive exploration; drill into signals; apply fixes |
-| `--json` | Machine-readable verdict; LLM tool harnesses |
+| TOON (default when piped / in CI) | Compact, diff-friendly full report to stdout |
+| `--json` | Machine-readable verdict as JSON (shortcut for `--report json`); LLM tool harnesses |
+| `--report yaml` | Full report as YAML |
 | `--report markdown --out maturity.md` | Committable report |
 | `--report sarif --out plumbline.sarif` | GitHub code-scanning |
 | `snapshot` → `.plumbline.toon` | Committable maturity-state artifact (TOON; `--format json\|yaml` to force) |
-| `--report toon` / `--report yaml` | Same report as `--report json`, in TOON / YAML notation |
 | `--events ndjson` on stderr | Per-signal progress events while scanning |
 
-`--report json`, `toon`, and `yaml` are lossless re-encodings of the same report — same fields, different notation. [TOON](https://github.com/toon-format/spec) is compact and token-efficient, which is why it's the default `snapshot` format.
+TOON is the default CLI output: on a terminal you get the TUI, and everywhere else (pipes, CI) `plumbline assess` emits TOON. `--report json` (or `--json`), `toon`, and `yaml` are lossless re-encodings of the same report — same fields, different notation. [TOON](https://github.com/toon-format/spec) is compact and token-efficient, which is why it's both the default output and the default `snapshot` format.
 
 Schemas are published via `plumbline schema {verdict, signal-result, event, config}` (draft 2020-12).
 

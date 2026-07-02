@@ -236,8 +236,7 @@ func TestIntegration_DebugFlag_StdoutUnchangedStderrCarriesProbes(t *testing.T) 
 
 // ansiRE matches CSI sequences (ESC[…). runCLI captures stdout through
 // a bytes.Buffer (not a TTY), so the "not a TTY" rule should already
-// suppress color. This test pins the more aggressive --no-color case
-// because the brief-text output uses status colors at all.
+// suppress color — and the default TOON output carries no ANSI anyway.
 var ansiRE = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func TestIntegration_ColorSuppressed_NotATTY(t *testing.T) {
@@ -284,9 +283,9 @@ func TestIntegration_NoStdinReads_AssessCompletesWithoutStdin(t *testing.T) {
 
 // ===========================================================================
 // Cross-format consistency
-// The same repo through --json, --report markdown, and the brief text
-// summary must agree on the verdict level. (SARIF is currently a stub
-// in main, so it's not asserted here.)
+// The same repo through --json, --report markdown, and the default
+// TOON output must agree on the verdict level. (SARIF is currently a
+// stub in main, so it's not asserted here.)
 // ===========================================================================
 
 func TestIntegration_FormatsAgreeOnVerdict(t *testing.T) {
@@ -310,13 +309,15 @@ func TestIntegration_FormatsAgreeOnVerdict(t *testing.T) {
 			rpt.Verdict.Level, outMD)
 	}
 
-	codeTxt, outTxt, _ := runCLI(t, "assess", "--cli", dir)
-	if codeTxt != exitOK {
-		t.Fatalf("brief text exit = %d", codeTxt)
+	// Default CLI output is TOON; the verdict level appears as a
+	// "level: N" key inside the verdict block.
+	codeToon, outToon, _ := runCLI(t, "assess", "--cli", dir)
+	if codeToon != exitOK {
+		t.Fatalf("default (toon) exit = %d", codeToon)
 	}
-	if !strings.Contains(outTxt, "Assessed level: "+intStr(int(rpt.Verdict.Level))) {
-		t.Errorf("brief-text disagrees with --json verdict level %d; text:\n%s",
-			rpt.Verdict.Level, outTxt)
+	if !strings.Contains(outToon, "level: "+intStr(int(rpt.Verdict.Level))) {
+		t.Errorf("default toon output disagrees with --json verdict level %d; toon:\n%s",
+			rpt.Verdict.Level, outToon)
 	}
 }
 
@@ -394,11 +395,11 @@ func TestIntegration_EventsNDJSON_EveryLineParseableWithEventField(t *testing.T)
 
 // ===========================================================================
 // Quiet mode
-// --quiet should suppress the trailing hint and brief-text summary on
-// success. (Still emits errors on stderr.)
+// --quiet should suppress the default report output on success, leaving
+// stdout shorter than a normal run. (Still emits errors on stderr.)
 // ===========================================================================
 
-func TestIntegration_QuietMode_SuppressesHintAndBriefTextOnSuccess(t *testing.T) {
+func TestIntegration_QuietMode_SuppressesDefaultOutputOnSuccess(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "README.md", "# r\n")
 

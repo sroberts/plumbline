@@ -57,8 +57,8 @@ type assessFlags struct {
 // assess subcommand and by the root command's default action.
 func bindAssessFlags(cmd *cobra.Command, f *assessFlags) {
 	fs := cmd.Flags()
-	fs.BoolVar(&f.asJSON, "json", false, "Emit JSON to stdout. Implies --cli. Schema: 'plumbline schema verdict'.")
-	fs.StringVar(&f.reportFmt, "report", "", "Write a report file. fmt: markdown|json|sarif|toon|yaml. Implies --cli.")
+	fs.BoolVar(&f.asJSON, "json", false, "Shortcut for --report json. Emit JSON to stdout. Implies --cli. Schema: 'plumbline schema verdict'.")
+	fs.StringVar(&f.reportFmt, "report", "", "Pick an alternative report format: toon|json|yaml|markdown|sarif. Default CLI output is toon. Implies --cli.")
 	fs.StringVar(&f.outPath, "out", "-", "Report destination. \"-\" = stdout.")
 	fs.StringVar(&f.eventsFmt, "events", "", "Stream progress events to stderr. fmt: ndjson|text. Schema: 'plumbline schema event'.")
 	fs.BoolVarP(&f.quiet, "quiet", "q", false, "Suppress banners, progress, and trailing hints. Implies --cli.")
@@ -208,7 +208,12 @@ func makeAssessRunE(flags *assessFlags, stdout, stderr io.Writer) func(*cobra.Co
 				return errCannotRun(err)
 			}
 		case !flags.quiet:
-			writeBriefText(stdout, rpt)
+			// Default CLI output is TOON — a compact, diff-friendly,
+			// lossless re-encoding of the full Report. JSON and YAML
+			// are the alternatives, selected with --json or --report.
+			if err := writeReport(rpt, "toon", flags.outPath, stdout); err != nil {
+				return errCannotRun(err)
+			}
 		}
 
 		if flags.historyOut != "" {
@@ -247,6 +252,11 @@ scores, and the list of signals that would unlock the next level.
 
 Mode is auto-detected: TUI on a terminal, CLI when piped or in CI.
 Use --cli to force non-interactive output, --tui to force the TUI.
+
+In CLI mode the default output is TOON (Token-Oriented Object Notation):
+a compact, diff-friendly, lossless encoding of the full Report. JSON and
+YAML are the alternatives — use --json (a shortcut for --report json) or
+--report yaml. markdown and sarif emit summaries rather than the full data.
 
 This command is also the default — running 'plumbline [path]' without
 a subcommand is equivalent to 'plumbline assess [path]'.
@@ -557,27 +567,4 @@ func parseConfidence(s string) (acmm.Confidence, error) {
 	default:
 		return "", fmt.Errorf("invalid --min-confidence %q (want low|medium|high)", s)
 	}
-}
-
-// writeBriefText prints a one-screen summary of the verdict.
-func writeBriefText(w io.Writer, r acmm.Report) {
-	fmt.Fprintf(w, "plumbline · %s\n", r.Repo)
-	fmt.Fprintf(w, "Assessed level: %d (%s)\n\n", r.Verdict.Level, r.Verdict.Name)
-	for _, l := range []acmm.Level{
-		acmm.LevelInstructed,
-		acmm.LevelMeasured,
-		acmm.LevelAdaptive,
-		acmm.LevelSelfSustaining,
-	} {
-		fmt.Fprintf(w, "  L%d %-16s  %5.1f%%\n", l, l.Name(), r.Verdict.LevelScores[l]*100)
-	}
-	if len(r.Verdict.NextGap) > 0 {
-		fmt.Fprintln(w)
-		fmt.Fprintf(w, "Next-level gap (to reach L%d):\n", r.Verdict.Level+1)
-		for _, id := range r.Verdict.NextGap {
-			fmt.Fprintf(w, "  · %s\n", id)
-		}
-	}
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Hint: re-run with --json for machine-readable output.")
 }

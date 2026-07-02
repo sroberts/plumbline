@@ -85,9 +85,9 @@ Two interfaces at full feature parity:
   • Pure CLI — flag-driven, for LLM tool callers and CI gates
 
 Bare invocation runs the unified scan + score + report pipeline:
-  plumbline                # scan ".", TUI on a terminal / brief text otherwise
+  plumbline                # scan ".", TUI on a terminal / TOON otherwise
   plumbline /path/to/repo  # scan a specific repo
-  plumbline --json         # machine-readable verdict
+  plumbline --json         # JSON verdict (shortcut for --report json)
   plumbline --fail-below 3 # CI gate
 
 This is the same pipeline as 'plumbline assess'. Use the subcommands

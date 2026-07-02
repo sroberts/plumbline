@@ -157,11 +157,17 @@ const helpOutput = `# Output Modes
 
 plumbline emits results in several formats. Schemas at 'plumbline schema <name>'.
 
-## Default human-readable text
-'plumbline assess' — one-screen summary: level bars, next-gap panel, hint to use --json.
+## Default output: TOON
+'plumbline assess' in CLI mode emits TOON (Token-Oriented Object Notation) — a
+compact, diff-friendly, lossless encoding of the full Report (schema: 'plumbline
+schema verdict'). On a terminal you get the interactive TUI instead; TOON is the
+piped / CI default. JSON and YAML are the alternatives below.
 
-## JSON ('--json')
-'plumbline assess --json' — full Report (schema: 'plumbline schema verdict'). Stable structure, machine-friendly.
+## JSON ('--json' or '--report json')
+'plumbline assess --json' — full Report as JSON. '--json' is a shortcut for '--report json'.
+
+## YAML ('--report yaml')
+'plumbline assess --report yaml' — full Report as YAML.
 
 ## Markdown report ('--report markdown')
 'plumbline assess --report markdown --out maturity.md' — committable summary.
@@ -169,9 +175,10 @@ plumbline emits results in several formats. Schemas at 'plumbline schema <name>'
 ## SARIF ('--report sarif')
 'plumbline assess --report sarif' — GitHub code-scanning findings for missing/partial signals.
 
-## Report formats ('--report json|markdown|sarif|toon|yaml')
+## Report formats ('--report toon|json|yaml|markdown|sarif')
 '--report' writes the full Report in any of these notations to '--out' ("-" = stdout).
-json, toon, and yaml are lossless re-encodings of the same data; markdown and sarif are summaries.
+toon (the default), json, and yaml are lossless re-encodings of the same data; markdown
+and sarif are summaries. Omit '--report' to get the default toon.
 
 ## Maturity snapshot ('plumbline snapshot')
 'plumbline snapshot' writes a committable maturity-state artifact — '.plumbline.toon' by default
