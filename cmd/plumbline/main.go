@@ -106,6 +106,7 @@ publish schemas, etc.). Run 'plumbline help' for topical guides.`,
 	root.AddCommand(
 		newAssessCmd(stdout, stderr),
 		newSnapshotCmd(stdout, stderr),
+		newDiffCmd(stdout, stderr),
 		newInspectCmd(stdout, stderr),
 		newSignalsCmd(stdout, stderr),
 		newExplainCmd(stdout, stderr),

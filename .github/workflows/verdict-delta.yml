@@ -1,16 +1,20 @@
 name: Verdict delta on merge
 
 # Posts a comment on every merged PR showing how the change moved
-# plumbline's own ACMM verdict (level + per-level scores). When the
-# verdict level changed, the comment also nudges the author to
+# plumbline's own ACMM verdict — the level move plus which signals
+# flipped status. When the level changed, it also nudges the author to
 # update CLAUDE.md's project-status section, since that's where the
 # README/agent context lives. The codebase teaching itself: a merge
-# either reinforces the maturity story (no change) or shifts it,
-# and shifts deserve a doc update.
+# either reinforces the maturity story (no change) or shifts it, and
+# shifts deserve a doc update.
 #
-# Closes the ACMM L5 self-improvement loop: a workflow on
-# pull_request: closed that surfaces signal-driven feedback about
-# instruction files (CLAUDE.md, copilot-instructions.md).
+# The base verdict is read straight from the committed .plumbline.toon at
+# the base commit (the drift gate in ci.yml keeps it current), so this
+# workflow assesses only the head — no base checkout, no second full
+# scan. Comparison + per-signal delta come from `plumbline diff`, which
+# decodes the snapshot artifacts. (Closes the ACMM L5 self-improvement
+# loop: a pull_request:closed workflow that surfaces signal-driven
+# feedback about instruction files.)
 
 on:
   pull_request:
@@ -28,7 +32,7 @@ jobs:
       - name: check out merged head
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # need both head and base for the delta
+          fetch-depth: 0  # need the base commit's blob for `git show`
           ref: ${{ github.event.pull_request.merge_commit_sha }}
 
       - uses: actions/setup-go@v5
@@ -39,66 +43,48 @@ jobs:
       - name: build plumbline
         run: go build -o /tmp/plumbline ./cmd/plumbline
 
-      - name: assess head
-        id: head
-        run: |
-          /tmp/plumbline assess --json . > /tmp/head.json
-          echo "level=$(jq -r .verdict.level /tmp/head.json)" >> "$GITHUB_OUTPUT"
-          echo "name=$(jq -r .verdict.name /tmp/head.json)" >> "$GITHUB_OUTPUT"
+      - name: snapshot head
+        # One scan, of the merged head. The base is not scanned.
+        run: /tmp/plumbline snapshot --format json --out /tmp/head.json .
 
-      - name: assess base
+      - name: recover base snapshot
         id: base
         run: |
-          # The base is the first parent of the merge commit (i.e.,
-          # main right before the merge). We assess against that snapshot
-          # for the delta. If checkout fails (shallow / squash), bail
-          # with same-as-head so the comment still posts.
           base_sha=$(git rev-parse "${{ github.event.pull_request.merge_commit_sha }}^1" 2>/dev/null || echo "")
-          if [ -z "$base_sha" ]; then
-            echo "level=${{ steps.head.outputs.level }}" >> "$GITHUB_OUTPUT"
-            echo "name=${{ steps.head.outputs.name }}" >> "$GITHUB_OUTPUT"
-            exit 0
+          if [ -n "$base_sha" ] && git show "$base_sha:.plumbline.toon" > /tmp/base.toon 2>/dev/null; then
+            echo "have_base=true" >> "$GITHUB_OUTPUT"
+          else
+            # Base predates the committed artifact (or is unreachable) —
+            # no baseline to diff against. Fall back to a level-only note.
+            echo "have_base=false" >> "$GITHUB_OUTPUT"
           fi
-          git stash --include-untracked >/dev/null 2>&1 || true
-          git checkout "$base_sha" -- .
-          /tmp/plumbline assess --json . > /tmp/base.json
-          git checkout HEAD -- .
-          git stash pop >/dev/null 2>&1 || true
-          echo "level=$(jq -r .verdict.level /tmp/base.json)" >> "$GITHUB_OUTPUT"
-          echo "name=$(jq -r .verdict.name /tmp/base.json)" >> "$GITHUB_OUTPUT"
 
       - name: compose comment
         id: msg
-        env:
-          HEAD_LEVEL: ${{ steps.head.outputs.level }}
-          HEAD_NAME: ${{ steps.head.outputs.name }}
-          BASE_LEVEL: ${{ steps.base.outputs.level }}
-          BASE_NAME: ${{ steps.base.outputs.name }}
         run: |
+          delim="PLUMBLINE_DELTA_EOF"
           {
-            echo "body<<EOF"
-            echo "## plumbline verdict delta"
-            echo ""
-            if [ "$HEAD_LEVEL" = "$BASE_LEVEL" ]; then
-              echo "Verdict unchanged: **L${HEAD_LEVEL} (${HEAD_NAME})**."
-              echo ""
-              echo "_Per-level scores:_"
-            else
-              if [ "$HEAD_LEVEL" -gt "$BASE_LEVEL" ]; then
-                arrow="↑"
-              else
-                arrow="↓"
+            echo "body<<$delim"
+            if [ "${{ steps.base.outputs.have_base }}" = "true" ]; then
+              # Mixed formats are fine: base is TOON, head is JSON.
+              /tmp/plumbline diff /tmp/base.toon /tmp/head.json
+              changed=$(/tmp/plumbline diff /tmp/base.toon /tmp/head.json --json | jq -r '.level_changed')
+              if [ "$changed" = "true" ]; then
+                echo ""
+                echo "The verdict level changed — consider updating \`CLAUDE.md\`'s project-status section so future agent sessions and contributors see the new state."
               fi
-              echo "Verdict moved **L${BASE_LEVEL} (${BASE_NAME}) ${arrow} L${HEAD_LEVEL} (${HEAD_NAME})**."
+            else
+              level=$(jq -r '.verdict.level' /tmp/head.json)
+              name=$(jq -r '.verdict.name' /tmp/head.json)
+              echo "## plumbline verdict delta"
               echo ""
-              echo "Consider updating \`CLAUDE.md\`'s project-status section so future agent sessions and contributors see the new state."
+              echo "No committed \`.plumbline.toon\` at the base commit, so there's no baseline to diff against. Baseline is now established at this merge."
               echo ""
-              echo "_Per-level scores:_"
+              echo "Current verdict: **L${level} (${name})**."
             fi
-            jq -r '.verdict.level_scores | to_entries[] | "  - L\(.key): \((.value*100|floor))%"' /tmp/head.json
             echo ""
             echo "<sub>Generated by .github/workflows/verdict-delta.yml. Re-run with workflow_dispatch if needed.</sub>"
-            echo "EOF"
+            echo "$delim"
           } >> "$GITHUB_OUTPUT"
 
       - name: post comment
