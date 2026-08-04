@@ -23,6 +23,7 @@ Each signal is a deterministic detector that returns a status (`found` / `partia
 | `l3.coverage-suite` | coverage | Scheduled (cron) coverage suite |
 | `l3.error-monitoring` | monitoring | Error-monitoring SDK declared in dependency manifest |
 | `l3.flaky-analysis` | compliance | Flaky-test tracking workflow or report file |
+| `l3.metrics-acted-on` | metrics | Collected metrics are acted on, not just published |
 | `l3.nightly-compliance` | compliance | Scheduled compliance / a11y / perf / security suite |
 | `l3.user-feedback` | feedback | User-feedback / NPS / survey channel wired up |
 
@@ -45,4 +46,4 @@ Each signal is a deterministic detector that returns a status (`found` / `partia
 | `l5.multi-repo-orchestration` | automation | Workflow fans out across multiple repositories |
 | `l5.self-improvement` | automation | Workflow updates instruction files based on merged PRs |
 
-_21 signals total._
+_22 signals total._

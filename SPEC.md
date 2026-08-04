@@ -267,6 +267,7 @@ Signals are derived directly from Table 2 ("Complete Feedback Loop Inventory") o
 | `l3.error-monitoring` | Repo references an error monitor (Sentry SDK init, GA4 error tracking, OpenTelemetry exporter) in dependency manifests or source. |
 | `l3.user-feedback` | NPS/CSAT survey component (filename match `*nps*`, `*survey*`) **or** a `feedback/` issue template. |
 | `l3.acceptance-tracking` | A tracked file matching `auto-qa-tuning.json`, `acceptance-rates.*`, or analogous JSON in a `metrics/` directory. |
+| `l3.metrics-acted-on` | The **dashboard-graveyard** check. If CI publishes a metric (Codecov, Coveralls, Sonar, Datadog, or an `upload-artifact` whose name/path is a metric), at least one step must act on a number — a failure condition (`exit 1`, `::error::`, `--fail-*`) in a step that also references a metric. Both halves are required: a bare `exit 1` in a gofmt check acts on no metric. `NA` when nothing is published — this signal grades what happens to metrics, not whether they exist. |
 
 **Level 4 — Adaptive**
 
@@ -327,6 +328,22 @@ The concrete case (github.com/sroberts/decant, a Go library) scored 0.67 on both
 - Generic threshold flags need a context check. `--fail-below` was matching plumbline's own `plumbline assess --fail-below 3` maturity gate in `canary-repos.yml` and crediting it as a coverage gate.
 - When a signal can only confirm intent rather than execution — a step *named* `Lint` running an unrecognized script — it may still fire, but at low confidence. Reporting nothing is worse; reporting it as certain is dishonest.
 - Detector gaps are bugs against the detector. The `l3.build-lint-gate` fix hint now says so, rather than telling a team to add a step they already run.
+
+#### L3: the dashboard graveyard is graded as a positive signal, not an inverted one
+
+The paper names two anti-patterns the assessor should flag. Anti-patterns invert awkwardly in this scoring model — `Status: Found` means "the thing is present", and a detector that fires on something *bad* would raise the level score by finding it.
+
+`l3.metrics-acted-on` inverts the framing instead of the score. It asks the positive question — are the numbers this repo collects acted on? — and returns `Missing` for the graveyard. That keeps `Found` meaning "good" everywhere in the catalog, and level math needs no special case.
+
+It returns `NA` when the repo publishes no metrics at all, which excludes it from the level average (§7). Nothing is being collected, so there is no graveyard to find, and the other L3 signals already grade whether measurement exists.
+
+This one was prompted by a dead metrics pipe in plumbline's own `ci.yml`: coverage uploaded to Codecov on every push to main via `${{ secrets.CODECOV_TOKEN }}`, in a repo with no Actions secrets. Every run posted `Token length: 0` and `HTTP 400`, and `fail_ci_if_error: false` swallowed it. No badge, no branch protection, no PR uploads, nothing downstream — and it sat in a repo scoring itself L5, while `CLAUDE.md` named the dashboard graveyard as an anti-pattern the tool should flag and no detector for it existed.
+
+**This signal would not have caught that, and the distinction matters.** Run against the commit that carried the dead upload, `l3.metrics-acted-on` returns `Found` — correctly, by its own rule, because plumbline's coverage floors *are* live consumers. The signal grades one question at repo scope: does anything here act on a number? A repo can answer yes and still carry an individual publisher that feeds nothing.
+
+Catching *that* needs per-metric provenance — tracing a specific published artifact to a specific consumer — which the current AST cannot express. It is a real gap, deliberately not papered over: the honest version of this detector finds graveyards, not individual graves.
+
+**Further limits:** this is a static scan of workflow topology. It cannot tell that an upload is unauthenticated, that a published metric and a gated metric are the same number, or that a dashboard has readers. It grades whether the loop is *wired*, which is what ACMM levels are defined by — not whether it is live. Confidence is capped at medium for that reason.
 
 #### L3+: GitHub-Actions only in MVP
 

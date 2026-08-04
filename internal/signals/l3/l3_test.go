@@ -353,3 +353,112 @@ func TestUserFeedback_DocFileWithFeedbackInNameIsRejected(t *testing.T) {
 		t.Errorf("docs file mentioning feedback: score = %v, want missing", got.Score)
 	}
 }
+
+// dashboardGraveyardCI publishes coverage to an external service and does
+// nothing else with it. No threshold, no failure — the L3 anti-pattern.
+const dashboardGraveyardCI = `
+name: CI
+on: [pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: go test -coverprofile=coverage.out ./...
+      - name: codecov upload
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.out
+`
+
+// binaryUploadOnlyCI uploads build output, not metrics. upload-artifact is
+// how binaries and logs move between jobs; that is not a dashboard.
+const binaryUploadOnlyCI = `
+name: CI
+on: [pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: go build -o bin/app ./cmd/app
+      - name: upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: app
+          path: bin/app
+`
+
+func TestMetricsActedOn(t *testing.T) {
+	cases := []struct {
+		name       string
+		files      fstest.MapFS
+		wantStatus acmm.Status
+	}{
+		{
+			"no publishers is not gradeable",
+			fstest.MapFS{".github/workflows/ci.yml": {Data: []byte(ciWorkflowYAML)}},
+			acmm.StatusNA,
+		},
+		{
+			"published and never acted on",
+			fstest.MapFS{".github/workflows/ci.yml": {Data: []byte(dashboardGraveyardCI)}},
+			acmm.StatusMissing,
+		},
+		{
+			"published and gated",
+			fstest.MapFS{
+				".github/workflows/ci.yml":  {Data: []byte(dashboardGraveyardCI)},
+				".github/workflows/cov.yml": {Data: []byte(coverageWithThreshold)},
+			},
+			acmm.StatusFound,
+		},
+		{
+			"uploading a binary is not publishing a metric",
+			fstest.MapFS{".github/workflows/ci.yml": {Data: []byte(binaryUploadOnlyCI)}},
+			acmm.StatusNA,
+		},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			got := runOn(t, MetricsActedOn{}, c.files)
+			if got.Status != c.wantStatus {
+				t.Errorf("status = %v, want %v (notes: %v)", got.Status, c.wantStatus, got.Notes)
+			}
+		})
+	}
+}
+
+// NA must not be scored as a failure: scoring excludes NA from the level
+// average, so a repo that publishes nothing is not penalized here.
+func TestMetricsActedOnNAIsExcludedFromScoring(t *testing.T) {
+	got := runOn(t, MetricsActedOn{}, fstest.MapFS{})
+	if got.Status != acmm.StatusNA {
+		t.Fatalf("status = %v, want na", got.Status)
+	}
+	if got.Confidence != acmm.ConfidenceHigh {
+		t.Errorf("confidence = %v, want high — absence of publishers is directly observable", got.Confidence)
+	}
+}
+
+// A bare `exit 1` in an unrelated step is not a metrics consumer. Without
+// this guard every repo with a gofmt check passes the signal regardless of
+// what happens to the numbers it publishes.
+func TestMetricsActedOnIgnoresUnrelatedFailures(t *testing.T) {
+	files := fstest.MapFS{".github/workflows/ci.yml": {Data: []byte(`
+name: CI
+on: [pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: gofmt
+        run: |
+          test -z "$(gofmt -l .)" || exit 1
+      - name: codecov upload
+        uses: codecov/codecov-action@v5
+`)}}
+	got := runOn(t, MetricsActedOn{}, files)
+	if got.Status != acmm.StatusMissing {
+		t.Errorf("status = %v, want missing — gofmt's exit 1 acts on no metric", got.Status)
+	}
+}
