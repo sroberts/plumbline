@@ -115,13 +115,13 @@ jobs:
           echo "::error::coverage ${{ fromJson(steps.cov.outputs.data).total }}% is below floor ${{ fromJson(steps.cov.outputs.data).floor }}%"
           exit 1
 
-      - name: codecov upload
-        # Only on push to main; PR runs would clutter codecov with
-        # transient checks for branches that may never merge.
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.txt
-          fail_ci_if_error: false
-          verbose: true
-          token: ${{ secrets.CODECOV_TOKEN }}
+      # There was a codecov upload here. It never worked: the repo has no
+      # CODECOV_TOKEN, so every run posted "Token length: 0 / HTTP 400" and
+      # fail_ci_if_error: false swallowed it. It also only ran on push to
+      # main, so Codecov never saw a PR head report to compare against, and
+      # main has no branch protection, so no status could have gated a merge.
+      #
+      # Removed rather than repaired: the floors above already close the
+      # loop — measure, compare against .coverage-floor, fail the build —
+      # and the ratchet moves that floor up. A second target living in
+      # codecov.yml would drift from it the first time the ratchet fired.
