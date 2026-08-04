@@ -67,12 +67,13 @@ signals[21]:
     status: found
     title: CI workflow runs build and lint on push or PR
   - confidence: medium
-    evidence[1]{excerpt,path}:
-      "coverage:\n  status:\n    project:\n      default:\n        target: 60%\n        threshold: 1%\n    patch:\n      default:\n        target: 60%\n        threshold: 1%\n\n#",codecov.yml
+    evidence[1]{path}:
+      .github/workflows/ci.yml
     family: coverage
     id: l3.coverage-gate
     level: 3
-    method: content-regex
+    method: ast
+    notes[1]: "hand-rolled Go coverage gate: threshold comparison in an if: conditional that fails the job"
     score: 1
     status: found
     title: Coverage gate fails CI below a threshold

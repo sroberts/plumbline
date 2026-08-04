@@ -258,8 +258,8 @@ Signals are derived directly from Table 2 ("Complete Feedback Loop Inventory") o
 
 | ID | Detection rule |
 |---|---|
-| `l3.build-lint-gate` | A workflow runs on `push`/`pull_request` and contains a build *and* lint step (string match against common tools or a `lint`/`build` job name). |
-| `l3.coverage-gate` | A workflow on `pull_request` invokes a coverage tool with a threshold flag (`--cov-fail-under`, `coverage threshold`, `--minimum-coverage`, etc.) **or** a `codecov.yml`/`.codecov.yaml` defines a target. |
+| `l3.build-lint-gate` | A workflow runs on `push`/`pull_request` and contains a build *and* lint step. Lint matches a recognized linter command (`golangci-lint`, `go vet`, `staticcheck`, `gofmt`, `eslint`, `ruff`, …) or a lint action (`golangci/*`, `dominikh/staticcheck-action`, `reviewdog`, …); failing both, a `lint`/`vet`/`fmt` job or step **name** matches, at reduced confidence. |
+| `l3.coverage-gate` | Any of: a `codecov.yml`/`.codecov.yaml` defines a target; a `pull_request` workflow runs a coverage threshold flag (`--cov-fail-under`, `--minimum-coverage`, `COVERAGE_THRESHOLD`, …) in a step that is also about coverage; or a hand-rolled gate — `go tool cover -func` plus a floor and a non-zero exit, in one step or split across a step `env:`/`if:` and its failure step. **See "Deviations from the source paper" below.** |
 | `l3.coverage-suite` | Coverage workflow exists on a periodic schedule (`schedule: cron`) — captures the "full coverage suite" pattern. |
 | `l3.nightly-compliance` | At least one scheduled workflow whose name/file matches `nightly`, `compliance`, `a11y`, `accessibility`, `security`, or `perf`. |
 | `l3.flaky-analysis` | Scheduled workflow named `flaky*` or `*flaky*`, **or** a tracked file like `flaky-tests.json`. |
@@ -308,6 +308,24 @@ Plumbline collapses these into a single `l2.agent-instructions` that fires on th
 #### L3: PR-template checklist is L2, not L3
 
 The paper places "PR template checklist" under L2 ("Instructed") in its description (lines 549–551) but its Table 2 entry hints at L2 / L3 ambiguity ("Every PR" frequency). Plumbline keeps it at L2: a checklist is encoded judgement, which is the L2 definition.
+
+#### L3: the CI gates detect ecosystem shapes, not one ecosystem's vocabulary
+
+The paper describes its gates in terms of the reference deployment's stack, and the first implementation of `l3.build-lint-gate` and `l3.coverage-gate` inherited that vocabulary wholesale: `golangci-lint` for linting, `--cov-fail-under` and friends for coverage thresholds. Both matchers scored real, working gates as absent when the repository used a different idiom.
+
+The concrete case (github.com/sroberts/decant, a Go library) scored 0.67 on both while implementing both:
+
+- It lints with `go vet ./...`, `gofmt -l`, and `dominikh/staticcheck-action` — the standard Go toolchain, none of which was in the linter list. Only the third-party aggregator was.
+- It gates coverage with `go tool cover -func`, an `awk` comparison against a `COVERAGE_THRESHOLD` env var, and `exit 1`. Go has **no** built-in coverage-threshold flag, so every Go coverage gate is hand-rolled and no flag-based matcher can ever see one.
+
+**Why this matters beyond the two regexes:** a detector that only recognizes one ecosystem's spelling does not measure maturity, it measures conformity. The failure mode is that the tool tells a team with a working gate to add the gate they already have — and the cheapest way to raise the score becomes reshaping CI to match the matcher rather than improving the feedback loop. Plumbline did exactly this to itself: `codecov.yml` was added in #20 ("raise plumbline to ACMM level 3") declaring a 60% target, with a comment conceding the repo did not push to Codecov and the file existed because the signal looked for it. The repo's real gate — the hard/soft coverage floors in `ci.yml` — went undetected. That file has been deleted and the gate is now detected where it actually lives.
+
+**Rules adopted:**
+
+- A detector must recognize the *shape* of a feedback loop (measure → compare → fail the build), not a fixed list of commands. The Go arm of `l3.coverage-gate` asserts those three properties rather than matching a flag.
+- Generic threshold flags need a context check. `--fail-below` was matching plumbline's own `plumbline assess --fail-below 3` maturity gate in `canary-repos.yml` and crediting it as a coverage gate.
+- When a signal can only confirm intent rather than execution — a step *named* `Lint` running an unrecognized script — it may still fire, but at low confidence. Reporting nothing is worse; reporting it as certain is dishonest.
+- Detector gaps are bugs against the detector. The `l3.build-lint-gate` fix hint now says so, rather than telling a team to add a step they already run.
 
 #### L3+: GitHub-Actions only in MVP
 
