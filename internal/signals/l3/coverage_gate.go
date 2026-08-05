@@ -123,12 +123,18 @@ func (s CoverageGate) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Res
 		Status:     acmm.StatusMissing,
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceMedium,
-		Method:     acmm.MethodContentRegex,
-		Notes:      []string{"no codecov.yml target and no coverage threshold flag in any PR workflow"},
-		FixHint: "Either commit a codecov.yml with target.coverage (e.g. 80%), " +
-			"or add a coverage threshold flag to your test step " +
-			"(--cov-fail-under=80 for pytest, -coverpkg + threshold for go, etc.) " +
-			"so PRs that drop coverage actually fail.",
+		Method:     acmm.MethodAST,
+		Notes: []string{
+			"no codecov.yml target, no coverage threshold flag, and no " +
+				"hand-rolled gate (measure, compare, fail) in any PR workflow",
+		},
+		FixHint: "Make a PR that drops coverage fail. If your test runner has a " +
+			"threshold flag, use it (--cov-fail-under=80 for pytest, " +
+			"coverageThreshold in jest.config). Go has no such flag, so gate it " +
+			"in the workflow: capture the total from `go tool cover -func`, " +
+			"compare it against a floor, and exit 1 below it. A codecov.yml " +
+			"target also counts, but only if you actually upload to Codecov — " +
+			"committing one to satisfy this signal buys a score, not a gate.",
 	}
 }
 

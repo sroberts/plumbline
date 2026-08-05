@@ -439,17 +439,18 @@ Selecting a signal opens its evidence:
 ```
 l3.coverage-gate · MISSING
 ─────────────────────────────────────────────────
-A workflow on pull_request must invoke a coverage
-tool with a fail-on-threshold flag.
+Coverage must be compared against a floor by
+something that fails the build.
 
 Looked at:
   .github/workflows/ci.yml         (no coverage step)
   .github/workflows/test.yml       (coverage runs, no threshold)
   codecov.yml                      (not present)
 
-Fix: add a `--cov-fail-under=80` flag to the
-test step in test.yml, or commit a codecov.yml
-with a target.
+Fix: gate it in test.yml — capture the total from
+`go tool cover -func`, compare against a floor,
+exit 1 below it. Threshold flags work too where
+the runner has one (--cov-fail-under=80).
 
 [esc] back   [o] open in $EDITOR
 ```
@@ -503,8 +504,9 @@ Same content as the TUI detail screen, plain-text, no curses:
 $ plumbline inspect l3.coverage-gate
 l3.coverage-gate · MISSING
 
-A workflow on pull_request must invoke a coverage tool with a
-fail-on-threshold flag, or a codecov.yml must define a target.
+A PR-triggered workflow must compare coverage against a floor and
+fail the build below it — via a threshold flag, a hand-rolled
+comparison, or a codecov.yml target backed by real uploads.
 
 Looked at:
   /abs/.github/workflows/ci.yml          (no coverage step)
@@ -512,8 +514,9 @@ Looked at:
   /abs/codecov.yml                       (not present)
 
 Fix:
-  Add `--cov-fail-under=80` to the test step in test.yml,
-  or commit a codecov.yml with target.coverage.
+  Capture the total from `go tool cover -func` in test.yml,
+  compare it against a floor, and exit 1 below it. Runners with a
+  threshold flag can use that instead (--cov-fail-under=80).
 
 See also:
   plumbline explain l3.coverage-gate
@@ -577,12 +580,16 @@ When the user disagrees with a `Missing` verdict, they need to see what the dete
 ```
 $ plumbline assess --debug
 …
+[debug] l3.coverage-gate: stat codecov.yml                      hit=false
 [debug] l3.coverage-gate: stat .github/workflows/ci.yml         hit=true
 [debug] l3.coverage-gate: regex `--cov-fail-under` in ci.yml    hit=false
+[debug] l3.coverage-gate: regex `go tool cover -func` in ci.yml hit=false
 [debug] l3.coverage-gate: stat .github/workflows/test.yml       hit=true
 [debug] l3.coverage-gate: regex `--cov-fail-under` in test.yml  hit=false
-[debug] l3.coverage-gate: stat codecov.yml                      hit=false
-[debug] l3.coverage-gate: result = missing (score=0.0, conf=high, method=content-regex)
+[debug] l3.coverage-gate: regex `go tool cover -func` in test.yml   hit=true
+[debug] l3.coverage-gate: step `coverage` env/if threshold      hit=false
+[debug] l3.coverage-gate: regex `exit 1` in step `coverage`     hit=false
+[debug] l3.coverage-gate: result = partial (score=0.67, conf=low, method=ast)
 …
 ```
 
