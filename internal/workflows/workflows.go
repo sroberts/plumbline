@@ -7,6 +7,7 @@ package workflows
 import (
 	"bytes"
 	"regexp"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -17,6 +18,7 @@ type File struct {
 	Path string
 	Name string
 	On   Triggers
+	Env  map[string]string // workflow-level `env:`
 	Jobs []Job
 	Raw  []byte // original bytes, for raw-substring/regex fallbacks
 }
@@ -64,6 +66,7 @@ type Job struct {
 	Name        string
 	RunsOn      string
 	If          string
+	Env         map[string]string // job-level `env:`
 	Steps       []Step
 	Permissions map[string]string
 }
@@ -74,6 +77,7 @@ type Step struct {
 	Uses string
 	Run  string
 	With map[string]string
+	Env  map[string]string // step-level `env:`
 	If   string
 }
 
@@ -85,10 +89,18 @@ func Parse(path string, data []byte) (*File, error) {
 		return nil, err
 	}
 
-	f := &File{Path: path, Name: raw.Name, Raw: data}
+	f := &File{Path: path, Name: raw.Name, Env: raw.Env, Raw: data}
 	f.On = raw.On.parse()
-	for _, jr := range raw.Jobs {
-		f.Jobs = append(f.Jobs, jr.toJob())
+	// Jobs come out of a YAML mapping, so iteration order is random.
+	// Sort by job ID: detectors cite the first matching step as evidence,
+	// and that citation has to be stable across runs.
+	ids := make([]string, 0, len(raw.Jobs))
+	for id := range raw.Jobs {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		f.Jobs = append(f.Jobs, raw.Jobs[id].toJob(id))
 	}
 	return f, nil
 }
@@ -158,11 +170,84 @@ func (f *File) UsesAction(prefix string) bool {
 
 // AnyRunMatches reports whether any step's `run:` body matches re.
 func (f *File) AnyRunMatches(re *regexp.Regexp) bool {
+	for _, s := range f.AllSteps() {
+		if s.Run != "" && re.MatchString(s.Run) {
+			return true
+		}
+	}
+	return false
+}
+
+// AllSteps flattens every step of every job, in job order. Use it when a
+// signal needs to reason about a step as a unit (its run body together
+// with its `if:`, `env:`, or `uses:`) rather than asking a whole-file
+// question.
+func (f *File) AllSteps() []Step {
+	var out []Step
 	for _, j := range f.Jobs {
+		out = append(out, j.Steps...)
+	}
+	return out
+}
+
+// AnyStepNameMatches reports whether any step or job *name* matches re.
+// Names are author-written prose, not executable content, so a detector
+// relying on this should drop its confidence accordingly — a step named
+// "Lint" is an intent declaration, not proof that a linter ran.
+func (f *File) AnyStepNameMatches(re *regexp.Regexp) bool {
+	for _, j := range f.Jobs {
+		if j.Name != "" && re.MatchString(j.Name) {
+			return true
+		}
+		if j.ID != "" && re.MatchString(j.ID) {
+			return true
+		}
 		for _, s := range j.Steps {
-			if s.Run != "" && re.MatchString(s.Run) {
+			if s.Name != "" && re.MatchString(s.Name) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// AnyEnvMatches reports whether any `env:` key or value — at workflow,
+// job, or step scope — matches re. Thresholds are routinely declared as
+// env vars rather than inline literals (COVERAGE_THRESHOLD: "85.0"), so
+// a detector that reads only `run:` bodies misses them.
+func (f *File) AnyEnvMatches(re *regexp.Regexp) bool {
+	if envMatches(f.Env, re) {
+		return true
+	}
+	for _, j := range f.Jobs {
+		if envMatches(j.Env, re) {
+			return true
+		}
+		for _, s := range j.Steps {
+			if envMatches(s.Env, re) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func envMatches(env map[string]string, re *regexp.Regexp) bool {
+	for k, v := range env {
+		if re.MatchString(k) || re.MatchString(v) {
+			return true
+		}
+	}
+	return false
+}
+
+// AnyStepIfMatches reports whether any step's `if:` expression matches re.
+// GitHub-native gating puts the threshold comparison in `if:` and leaves
+// the `run:` body as nothing but the failure message.
+func (f *File) AnyStepIfMatches(re *regexp.Regexp) bool {
+	for _, s := range f.AllSteps() {
+		if s.If != "" && re.MatchString(s.If) {
+			return true
 		}
 	}
 	return false
@@ -180,6 +265,7 @@ func (f *File) RawContains(substr string) bool {
 type rawFile struct {
 	Name string            `yaml:"name"`
 	On   rawOn             `yaml:"on"`
+	Env  map[string]string `yaml:"env"`
 	Jobs map[string]rawJob `yaml:"jobs"`
 }
 
@@ -352,11 +438,12 @@ type rawJob struct {
 	Name        string            `yaml:"name"`
 	RunsOn      yaml.Node         `yaml:"runs-on"`
 	If          string            `yaml:"if"`
+	Env         map[string]string `yaml:"env"`
 	Steps       []rawStep         `yaml:"steps"`
 	Permissions map[string]string `yaml:"permissions"`
 }
 
-func (r rawJob) toJob() Job {
+func (r rawJob) toJob(id string) Job {
 	runsOn := ""
 	switch r.RunsOn.Kind {
 	case yaml.ScalarNode:
@@ -371,9 +458,11 @@ func (r rawJob) toJob() Job {
 		steps = append(steps, s.toStep())
 	}
 	return Job{
+		ID:          id,
 		Name:        r.Name,
 		RunsOn:      runsOn,
 		If:          r.If,
+		Env:         r.Env,
 		Steps:       steps,
 		Permissions: r.Permissions,
 	}
@@ -384,6 +473,7 @@ type rawStep struct {
 	Uses string            `yaml:"uses"`
 	Run  string            `yaml:"run"`
 	With map[string]string `yaml:"with"`
+	Env  map[string]string `yaml:"env"`
 	If   string            `yaml:"if"`
 }
 

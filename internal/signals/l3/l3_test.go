@@ -60,6 +60,103 @@ jobs:
       - run: echo
 `
 
+// goToolchainCI is the shape a Go repo that lints with the standard
+// toolchain produces: `go vet` plus a staticcheck action, no
+// golangci-lint anywhere. Taken from github.com/sroberts/decant, which
+// scored 0.67 on both L3 gates while genuinely implementing both.
+const goToolchainCI = `
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build
+        run: go build ./...
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            exit 1
+          fi
+      - name: Lint
+        run: go vet ./...
+      - name: Lint (staticcheck)
+        uses: dominikh/staticcheck-action@v1
+  corpus:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Coverage gate
+        env:
+          COVERAGE_THRESHOLD: "85.0"
+        run: |
+          go test -coverpkg=./... -coverprofile=coverage.out ./...
+          total=$(go tool cover -func=coverage.out | tail -1 | grep -oE '[0-9]+\.[0-9]+')
+          threshold="${COVERAGE_THRESHOLD}"
+          awk -v t="$total" -v f="$threshold" 'BEGIN { exit (t+0 >= f+0) ? 0 : 1 }' || {
+            echo "coverage ${total}% is below the ${threshold}% floor"
+            exit 1
+          }
+`
+
+// splitCoverageGateCI puts the measurement, the comparison, and the
+// failure in three separate steps, with the threshold in a GitHub-native
+// if: expression. This is plumbline's own ci.yml shape.
+const splitCoverageGateCI = `
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: measure coverage
+        id: cov
+        run: |
+          total=$(go tool cover -func=coverage.txt | awk '/^total:/ {gsub("%",""); print $3}')
+          floor=$(cat .coverage-floor 2>/dev/null || echo 60)
+          echo "data={\"total\": ${total}, \"floor\": ${floor}}" >> "$GITHUB_OUTPUT"
+      - name: coverage hard floor
+        if: ${{ fromJson(steps.cov.outputs.data).total < 50 }}
+        run: |
+          echo "::error::coverage is below the hard floor"
+          exit 1
+`
+
+// coverageReportedNotGated measures coverage and prints it, but nothing
+// fails. The L3 dashboard-graveyard anti-pattern — it must stay partial.
+const coverageReportedNotGated = `
+name: CI
+on:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          go test -coverprofile=coverage.out ./...
+          go tool cover -func=coverage.out | tail -1
+`
+
+// maturityGateCI invokes plumbline's own --fail-below flag. It is a gate,
+// but not a coverage gate: the threshold vocabulary must not claim it.
+const maturityGateCI = `
+name: canary
+on:
+  pull_request:
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    steps:
+      - run: /tmp/plumbline assess --quiet --fail-below 3 .
+`
+
 func TestBuildLintGate(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -74,6 +171,7 @@ on: [push]
 jobs:
   b: { runs-on: ubuntu-latest, steps: [{ run: "go build ./..." }] }
 `)}}, acmm.ScoreIncomplete},
+		{"go vet and staticcheck count as lint", fstest.MapFS{".github/workflows/ci.yml": {Data: []byte(goToolchainCI)}}, acmm.ScoreFound},
 	}
 	for _, c := range cases {
 		c := c
@@ -95,6 +193,10 @@ func TestCoverageGate(t *testing.T) {
 		{"missing", fstest.MapFS{}, acmm.ScoreMissing},
 		{"codecov.yml with target", fstest.MapFS{"codecov.yml": {Data: []byte("coverage:\n  status:\n    project:\n      default:\n        target: 80%\n")}}, acmm.ScoreFound},
 		{"PR workflow with --cov-fail-under", fstest.MapFS{".github/workflows/cov.yml": {Data: []byte(coverageWithThreshold)}}, acmm.ScoreFound},
+		{"hand-rolled Go gate in one step", fstest.MapFS{".github/workflows/ci.yml": {Data: []byte(goToolchainCI)}}, acmm.ScoreFound},
+		{"Go gate split across steps with an if: threshold", fstest.MapFS{".github/workflows/ci.yml": {Data: []byte(splitCoverageGateCI)}}, acmm.ScoreFound},
+		{"coverage measured but never gated stays partial", fstest.MapFS{".github/workflows/ci.yml": {Data: []byte(coverageReportedNotGated)}}, acmm.ScoreIncomplete},
+		{"non-coverage --fail-below is not a coverage gate", fstest.MapFS{".github/workflows/canary.yml": {Data: []byte(maturityGateCI)}}, acmm.ScoreMissing},
 	}
 	for _, c := range cases {
 		c := c
@@ -104,6 +206,30 @@ func TestCoverageGate(t *testing.T) {
 				t.Errorf("score = %v, want %v", got.Score, c.want)
 			}
 		})
+	}
+}
+
+// A step named "Lint" whose command we do not recognize still counts,
+// because SPEC.md §6 promises job-name matching — but it drops to low
+// confidence, since a name is a claim rather than an executed linter.
+func TestBuildLintGateNameFallbackIsLowConfidence(t *testing.T) {
+	files := fstest.MapFS{".github/workflows/ci.yml": {Data: []byte(`
+name: CI
+on: [pull_request]
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - run: go build ./...
+      - name: Lint
+        run: ./hack/house-style.sh
+`)}}
+	got := runOn(t, BuildLintGate{}, files)
+	if got.Score != acmm.ScoreFound {
+		t.Errorf("score = %v, want %v", got.Score, acmm.ScoreFound)
+	}
+	if got.Confidence != acmm.ConfidenceLow {
+		t.Errorf("confidence = %v, want low", got.Confidence)
 	}
 }
 

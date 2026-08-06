@@ -119,3 +119,88 @@ func TestParse_BadYAMLReturnsError(t *testing.T) {
 		t.Error("expected parse error")
 	}
 }
+
+func TestParse_EnvAtEveryScope(t *testing.T) {
+	src := `
+name: x
+on: [pull_request]
+env:
+  WORKFLOW_LEVEL: "1"
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    env:
+      JOB_LEVEL: "2"
+    steps:
+      - name: gate
+        env:
+          COVERAGE_THRESHOLD: "85.0"
+        run: echo hi
+`
+	f, err := Parse("a.yml", []byte(src))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	for _, key := range []string{"WORKFLOW_LEVEL", "JOB_LEVEL", "COVERAGE_THRESHOLD"} {
+		if !f.AnyEnvMatches(regexp.MustCompile(key)) {
+			t.Errorf("AnyEnvMatches(%s) = false, want true", key)
+		}
+	}
+	// Values are searched too, not only keys.
+	if !f.AnyEnvMatches(regexp.MustCompile(`85\.0`)) {
+		t.Error("AnyEnvMatches did not search env values")
+	}
+	if f.Jobs[0].Steps[0].Env["COVERAGE_THRESHOLD"] != "85.0" {
+		t.Error("step env not parsed onto the step")
+	}
+}
+
+func TestParse_StepAndJobNames(t *testing.T) {
+	src := `
+name: x
+on: [push]
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Lint (staticcheck)
+        uses: dominikh/staticcheck-action@v1
+`
+	f, _ := Parse("a.yml", []byte(src))
+	if !f.AnyStepNameMatches(regexp.MustCompile(`(?i)lint`)) {
+		t.Error("AnyStepNameMatches missed a step name")
+	}
+	if !f.AnyStepNameMatches(regexp.MustCompile(`quality`)) {
+		t.Error("AnyStepNameMatches missed the job ID")
+	}
+	if f.Jobs[0].ID != "quality" {
+		t.Errorf("job ID = %q, want quality", f.Jobs[0].ID)
+	}
+}
+
+// Jobs come out of a YAML mapping, whose Go iteration order is random.
+// Evidence citations name the first matching step, so job order has to be
+// stable or the same repo produces different evidence run to run.
+func TestParse_JobOrderIsDeterministic(t *testing.T) {
+	src := `
+name: x
+on: [push]
+jobs:
+  zebra: { runs-on: ubuntu-latest, steps: [{ run: "z" }] }
+  alpha: { runs-on: ubuntu-latest, steps: [{ run: "a" }] }
+  mike:  { runs-on: ubuntu-latest, steps: [{ run: "m" }] }
+`
+	for i := 0; i < 20; i++ {
+		f, _ := Parse("a.yml", []byte(src))
+		var ids []string
+		for _, j := range f.Jobs {
+			ids = append(ids, j.ID)
+		}
+		if got := strings.Join(ids, ","); got != "alpha,mike,zebra" {
+			t.Fatalf("job order = %q, want alpha,mike,zebra", got)
+		}
+		if steps := f.AllSteps(); len(steps) != 3 || steps[0].Run != "a" {
+			t.Fatalf("AllSteps order unstable: %+v", steps)
+		}
+	}
+}
