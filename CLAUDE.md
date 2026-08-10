@@ -4,13 +4,40 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Plumbline is in a pre-implementation / seed state. The repo currently contains only:
+Implemented and shipping. 22 signals across L2–L5, a TUI and a CLI at feature parity, and CI that gates itself on its own output.
 
-- `README.md` — one-line project description.
-- `the_ai_codebase_maturity_model.md` — the spec source (Andy Anderson's ACMM paper, Markdown converted via Microsoft MarkItDown).
-- `2604.09388v1.pdf` — the original paper.
+### Commands
 
-There is **no Go module, Makefile, source tree, CI config, or test suite yet.** Do not invent commands (`go test ...`, `make ...`) until those files actually exist — bootstrap them when needed and update this file in the same change.
+```
+make build          # -> ./plumbline
+make test           # go test ./...
+make test-race      # go test -race ./...
+make vet lint       # go vet; golangci-lint if installed
+go test ./internal/signals/l3/   # one package
+```
+
+### Layout
+
+| Path | What lives there |
+|---|---|
+| `cmd/plumbline/` | Cobra commands: `assess`, `snapshot`, `diff`, `inspect`, `signals`, `explain`, `schema`, `help` |
+| `cmd/gen-signal-docs/` | Regenerates `docs/SIGNALS.md` from the registry |
+| `internal/signals/l2…l5/` | One file per signal; `init()` registers into `signals.Default` |
+| `internal/workflows/` | GitHub Actions YAML → CI-agnostic AST |
+| `internal/scanner/` | Repo walk + file index |
+| `internal/scoring/` | Level math (§7) |
+| `internal/report/` | toon / json / yaml / markdown / sarif encoders, snapshot decode, diff |
+| `internal/tui/` | Bubble Tea UI |
+| `pkg/acmm/` | Public types: `Result`, `Status`, `Score`, `Confidence`, `Method` |
+
+### Invariants worth knowing before you edit
+
+- **`SPEC.md` is the contract**, not a sketch. Detection rules, scoring, output schemas, and the deviations from the paper all live there. Change it in the same commit as the behavior.
+- **Workflow signals go through `internal/workflows`**, never raw YAML regex. If the AST can't express what you need, extend the AST.
+- **`.plumbline.toon` is drift-gated in CI.** Any change that moves plumbline's own assessment must be committed alongside: `plumbline snapshot --out .plumbline.toon .`
+- **`docs/SIGNALS.md` is generated.** Run `go run ./cmd/gen-signal-docs -out docs/SIGNALS.md`; don't hand-edit.
+- **Signal IDs are public API.** Renames need a deprecation alias for at least one minor version.
+- **Detector gaps are bugs against the detector.** A repo with a working feedback loop that plumbline scores as missing is a defect here, not a prompt for the user to reshape their CI. See SPEC.md §6 "Deviations from the source paper" for how that principle got written down the hard way.
 
 ## What Plumbline is
 
@@ -36,8 +63,8 @@ The author's KubeStellar Console reference points (paths and cron cadences) are 
 
 Two anti-patterns the assessor should also flag:
 
-- **Dashboard graveyard** (L3 anti-pattern): metrics collected, never acted on.
-- **Autonomy without guardrails** (L4 anti-pattern): automation present, but the L3 measurement layer it depends on is missing — a level cannot be skipped.
+- **Dashboard graveyard** (L3 anti-pattern): metrics collected, never acted on. Detected by `l3.metrics-acted-on`, which inverts the framing rather than the score — it asks whether collected numbers are acted on, and returns `Missing` for the graveyard so `Found` keeps meaning "good" everywhere in the catalog.
+- **Autonomy without guardrails** (L4 anti-pattern): automation present, but the L3 measurement layer it depends on is missing — a level cannot be skipped. **No detector yet.**
 
 ## Working norms specific to this repo
 
