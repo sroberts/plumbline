@@ -33,6 +33,7 @@ Each signal is a deterministic detector that returns a status (`found` / `partia
 |---|---|---|
 | `l4.auto-triage` | automation | Scheduled workflow that triages issues automatically |
 | `l4.error-recovery` | automation | Workflow retries failures with backoff or continue-on-error |
+| `l4.measurement-backed` | guardrails | Repo-modifying automation is backed by a blocking gate |
 | `l4.self-modifying-config` | automation | Workflow writes back to the repo (PR or push) |
 | `l4.threshold-block` | automation | Workflow conditional reads metrics and gates on a threshold |
 | `l4.worktree-agents` | automation | Concurrent AI agent runner / devcontainer / worktree config |
@@ -46,4 +47,4 @@ Each signal is a deterministic detector that returns a status (`found` / `partia
 | `l5.multi-repo-orchestration` | automation | Workflow fans out across multiple repositories |
 | `l5.self-improvement` | automation | Workflow updates instruction files based on merged PRs |
 
-_22 signals total._
+_23 signals total._
