@@ -3,7 +3,7 @@ repo: plumbline
 scanned_at: "1970-01-01T00:00:00Z"
 schema: plumbline/v1
 signal_set_version: v2
-signals[21]:
+signals[22]:
   - confidence: medium
     evidence[1]{excerpt,path}:
       "# CLAUDE.md\n\nThis file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.\n\n## Project status\n\nPlumbline is in a pre-im…",CLAUDE.md
@@ -107,6 +107,18 @@ signals[21]:
     score: 1
     status: found
     title: Flaky-test tracking workflow or report file
+  - confidence: medium
+    evidence[2]{excerpt,path}:
+      upload coverage artifact,.github/workflows/coverage-nightly.yml
+      coverage hard floor (catastrophic regression block),.github/workflows/ci.yml
+    family: metrics
+    id: l3.metrics-acted-on
+    level: 3
+    method: ast
+    notes[1]: metrics are published and at least one gate acts on a collected number
+    score: 1
+    status: found
+    title: "Collected metrics are acted on, not just published"
   - confidence: medium
     evidence[1]{path}:
       .github/workflows/coverage-nightly.yml
@@ -222,7 +234,7 @@ verdict:
   level: 5
   level_scores:
     "2": 1
-    "3": 0.75
+    "3": 0.7777777777777778
     "4": 0.8
     "5": 0.75
   min_confidence_applied: low

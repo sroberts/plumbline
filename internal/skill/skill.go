@@ -284,7 +284,7 @@ interface; an interactive Bubble Tea TUI is also available on terminals.
 
 - **Signal IDs** are stable across patch releases:
   - L2: ` + "`l2.agent-instructions`" + `, ` + "`l2.contributor-guide`" + `, ` + "`l2.pr-template`" + `, ` + "`l2.commit-rules`" + `
-  - L3: build-lint-gate, coverage-gate, coverage-suite, nightly-compliance, flaky-analysis, error-monitoring, user-feedback, acceptance-tracking
+  - L3: build-lint-gate, coverage-gate, coverage-suite, nightly-compliance, flaky-analysis, error-monitoring, user-feedback, acceptance-tracking, metrics-acted-on
   - L4: self-modifying-config, auto-triage, threshold-block, worktree-agents, error-recovery
   - L5: issue-to-pr, self-improvement, docs-from-prs, multi-repo-orchestration
 - **JSON Schemas** (draft 2020-12) for verdict / signal-result / event / config
