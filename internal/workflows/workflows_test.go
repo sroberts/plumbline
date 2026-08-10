@@ -204,3 +204,44 @@ jobs:
 		}
 	}
 }
+
+// A job that calls a reusable workflow has no `steps:` at all. Before
+// job-level `uses:` was parsed, such a job looked empty and every
+// workflow signal concluded the work wasn't happening.
+func TestParse_JobLevelUses(t *testing.T) {
+	src := `
+name: CI
+on: [pull_request]
+jobs:
+  lint:
+    uses: acme/.github/.github/workflows/golangci-lint.yml@main
+    with:
+      go-version: "1.23"
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: go test ./...
+`
+	f, err := Parse("a.yml", []byte(src))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	var lint Job
+	for _, j := range f.Jobs {
+		if j.ID == "lint" {
+			lint = j
+		}
+	}
+	if !lint.IsReusableCall() {
+		t.Fatal("lint job not recognized as a reusable-workflow call")
+	}
+	if lint.With["go-version"] != "1.23" {
+		t.Errorf("reusable-workflow inputs not parsed: %v", lint.With)
+	}
+	if !f.AnyUsesMatches(regexp.MustCompile(`golangci-lint`)) {
+		t.Error("AnyUsesMatches missed a job-level uses")
+	}
+	if !f.UsesAction("acme/.github") {
+		t.Error("UsesAction missed a job-level uses")
+	}
+}
