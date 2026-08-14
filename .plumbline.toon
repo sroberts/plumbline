@@ -3,7 +3,7 @@ repo: plumbline
 scanned_at: "1970-01-01T00:00:00Z"
 schema: plumbline/v1
 signal_set_version: v2
-signals[22]:
+signals[23]:
   - confidence: medium
     evidence[1]{excerpt,path}:
       "# CLAUDE.md\n\nThis file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.\n\n## Project status\n\nPlumbline is in a pre-im…",CLAUDE.md
@@ -159,6 +159,20 @@ signals[22]:
     score: 1
     status: found
     title: Workflow retries failures with backoff or continue-on-error
+  - confidence: medium
+    evidence[4]{excerpt,path}:
+      open ratchet PR,.github/workflows/coverage-ratchet.yml
+      open follow-up PR if drift,.github/workflows/docs-signals.yml
+      assess + verdict gate,.github/workflows/canary-repos.yml
+      gofmt,.github/workflows/ci.yml
+    family: guardrails
+    id: l4.measurement-backed
+    level: 4
+    method: ast
+    notes[2]: repo-modifying automation exists alongside a blocking push/PR gate,"does not verify the gate covers what the automation touches, or that branch protection requires it"
+    score: 1
+    status: found
+    title: Repo-modifying automation is backed by a blocking gate
   - confidence: high
     evidence[1]{path}:
       .github/workflows/coverage-ratchet.yml
@@ -235,7 +249,7 @@ verdict:
   level_scores:
     "2": 1
     "3": 0.7777777777777778
-    "4": 0.8
+    "4": 0.8333333333333334
     "5": 0.75
   min_confidence_applied: low
   name: Self-Sustaining
