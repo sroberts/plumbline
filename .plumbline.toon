@@ -108,9 +108,10 @@ signals[22]:
     status: found
     title: Flaky-test tracking workflow or report file
   - confidence: medium
-    evidence[2]{excerpt,path}:
+    evidence[3]{excerpt,path}:
       upload coverage artifact,.github/workflows/coverage-nightly.yml
       coverage hard floor (catastrophic regression block),.github/workflows/ci.yml
+      report ratchet result when the PR could not be opened,.github/workflows/coverage-ratchet.yml
     family: metrics
     id: l3.metrics-acted-on
     level: 3
