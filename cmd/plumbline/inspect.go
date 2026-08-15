@@ -66,7 +66,6 @@ See also:
 			return ids, cobra.ShellCompDirectiveNoFileComp
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_ = debug
 			id := args[0]
 			path := "."
 			if len(args) > 1 {
@@ -90,6 +89,12 @@ See also:
 			ctx := cmd.Context()
 			if ctx == nil {
 				ctx = context.Background()
+			}
+			// Unlike assess, inspect prints diagnostics on stdout: its
+			// whole output is one signal a human is already reading, and
+			// there is no gate output here to keep stable.
+			if debug {
+				ctx = acmm.WithDiagnostics(ctx)
 			}
 			result := sig.Detect(ctx, idx)
 
@@ -150,6 +155,28 @@ func writeInspectText(w io.Writer, r acmm.SignalResult, repoPath string) {
 			if e.Excerpt != "" {
 				fmt.Fprintln(w, indentWrap("    ", e.Excerpt, 76))
 			}
+		}
+	}
+
+	if len(r.Diag) > 0 {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Probes:")
+		for _, e := range r.Diag {
+			if e.Action == "result" {
+				continue
+			}
+			mark := "·"
+			if e.Hit {
+				mark = "✓"
+			}
+			line := fmt.Sprintf("  %s %s", mark, e.Action)
+			if e.Path != "" {
+				line += " " + e.Path
+			}
+			if e.Detail != "" {
+				line += "  (" + e.Detail + ")"
+			}
+			fmt.Fprintln(w, line)
 		}
 	}
 
