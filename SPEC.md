@@ -714,7 +714,7 @@ Map keys are emitted in sorted order in both, keeping the artifact deterministic
 A committed artifact is only useful if it diffs cleanly — a file that churns on every scan is noise, not signal. So `snapshot` is **reproducible by default**: the two fields that vary by *when and where* the scan ran, rather than by the codebase's maturity, are normalized to stable values:
 
 - `scanned_at` → a fixed RFC3339 sentinel (`1970-01-01T00:00:00Z`). Still schema-valid (the field is required and typed `date-time`), but constant.
-- `repo` → the repository directory's base name, not the absolute path (stable across `/home/user/...` locally vs `/home/runner/work/...` in CI).
+- `repo` → the fixed sentinel `.`, not the scanned path. Base-name normalization was tried first and was not enough: it is stable across checkout *paths* but not checkout *names*, and the gate compares an artifact committed from one checkout against one regenerated in another. Git worktrees are named per-branch, forks are cloned under whatever the user typed, and CI checks out under the runner's own layout — each produced a spurious diff unrelated to maturity. `.` is honest for a committed artifact: the repo is the one the file lives in.
 
 `tool_version` and `signal_set_version` are left intact — they are intrinsic to *how* signals were scored, so a change in either is a real change worth surfacing in the diff. Re-running `snapshot` on an unchanged repo therefore produces a byte-identical file. Pass `--reproducible=false` to embed the live scan time and absolute path (for a per-run artifact you upload rather than commit).
 

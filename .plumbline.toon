@@ -1,5 +1,5 @@
 ci_system: github-actions
-repo: plumbline
+repo: .
 scanned_at: "1970-01-01T00:00:00Z"
 schema: plumbline/v1
 signal_set_version: v2
