@@ -249,8 +249,10 @@ interface; an interactive Bubble Tea TUI is also available on terminals.
 
    Parse ` + "`verdict.level`" + ` (1–5), ` + "`verdict.level_scores`" + ` (per-level
    averages), and ` + "`verdict.next_gap`" + ` (signals at L+1 not yet Found).
+   ` + "`next_gap`" + ` is empty at L5 — there is no L6, so read ` + "`level_scores`" + `
+   and the per-signal statuses to find what work remains.
 
-2. **For each signal in next_gap, get evidence + a fix recipe.**
+2. **For each gap, get evidence + a fix recipe.**
 
    ` + "```" + `
    plumbline inspect <signal-id> --json
@@ -260,6 +262,9 @@ interface; an interactive Bubble Tea TUI is also available on terminals.
    ` + "`confidence`" + `, ` + "`evidence`" + ` (file paths + excerpts), ` + "`notes`" + `
    (the "why"), and ` + "`fix_hint`" + ` (the "how to fix").
 
+   ` + "`plumbline explain <signal-id>`" + ` prints the detection rule and
+   rationale *without* scanning — cheaper when you only need the "what".
+
 3. **Preview a scaffolded fix; apply only with explicit confirmation.**
 
    ` + "```" + `
@@ -267,17 +272,35 @@ interface; an interactive Bubble Tea TUI is also available on terminals.
    plumbline fix <signal-id> --apply   # actually writes
    ` + "```" + `
 
-   Inputs (project conventions, anti-patterns, etc.) can be supplied with
-   repeatable ` + "`--input KEY=VALUE`" + ` pairs. Fixers refuse to overwrite
-   existing files; if the target already exists they append a marked
-   block instead.
+   **Only some signals have fixers** — the L2 scaffolding ones. Every other
+   signal exits 2 with "has no fixer". That exit code is the authoritative
+   check, so run the dry-run rather than guessing from the ID. Signals
+   without a fixer need judgment a scaffold can't supply (which SDK, which
+   triage rules); read ` + "`fix_hint`" + ` and write the artifact yourself.
 
-4. **Discover the catalog.**
+   Inputs can be supplied with repeatable ` + "`--input KEY=VALUE`" + ` pairs.
+   Fixers refuse to overwrite existing files; if the target already exists
+   they append a marked block instead.
+
+4. **Track maturity over time.**
+
+   ` + "```" + `
+   plumbline snapshot                         # writes .plumbline.toon
+   plumbline diff base.toon head.toon --json  # verdict delta
+   ` + "```" + `
+
+   ` + "`snapshot`" + ` is reproducible by default (volatile ` + "`scanned_at`" + ` /
+   ` + "`repo`" + ` fields normalized), so a committed ` + "`.plumbline.toon`" + ` can be
+   guarded with a CI drift gate. ` + "`diff`" + ` computes a PR delta against that
+   committed base without re-assessing both sides.
+
+5. **Discover the catalog.**
 
    ` + "```" + `
    plumbline signals --json
    plumbline schema verdict
    plumbline schema signal-result
+   plumbline help <topic>
    ` + "```" + `
 
 ## Stable contracts
@@ -290,6 +313,8 @@ interface; an interactive Bubble Tea TUI is also available on terminals.
 - **JSON Schemas** (draft 2020-12) for verdict / signal-result / event / config
   via ` + "`plumbline schema <name>`" + `.
 - **Exit codes**: 0 ok, 1 gate-failed (` + "`--fail-below`" + `), 2 cannot-run, 3 config-error.
+- **Report formats**: ` + "`--report toon|json|yaml|markdown|sarif`" + `. TOON is the
+  default CLI output; ` + "`--json`" + ` is shorthand for ` + "`--report json`" + `.
 - **Read-only by default.** Only ` + "`plumbline fix --apply`" + ` and
   ` + "`plumbline install-skill --apply`" + ` write inside the target repo.
 
@@ -300,10 +325,21 @@ interface; an interactive Bubble Tea TUI is also available on terminals.
   Whichever the team uses is fine; don't suggest adding all of them.
 - The four-step partial-credit rubric is fixed: 0.0 / 0.33 / 0.67 / 1.0.
   Don't propose a "0.5" — it's not in the rubric.
-- ` + "`--min-confidence high`" + ` is the right CI-gate strictness if the
-  verdict can't tolerate low-confidence (filename-only) matches.
+- ` + "`--min-confidence high`" + ` gates *partial* credit only: a signal scoring a
+  full 1.0 is always honored no matter its confidence. On a repo whose
+  Found signals all score 1.0, raising the gate changes nothing — that is
+  by design, not a bug.
+- A signal that genuinely doesn't apply (error monitoring for a CLI with no
+  runtime, say) belongs in ` + "`.plumbline.yml`" + ` as ` + "`enabled: false`" + `, not
+  faked. Disabled signals drop out of the level average rather than
+  scoring 0, so the level score rises.
+- Scope a run with ` + "`--level N`" + `, ` + "`--family <name>`" + `,
+  ` + "`--include-signal`" + `, or ` + "`--exclude-signal`" + ` (all repeatable).
 - Workflow signals (L3+) parse GitHub Actions YAML only in MVP; other
   CI systems are deferred behind ` + "`--ci-system`" + `.
+- ` + "`plumbline install-skill --list`" + ` shows the eight supported agent tools
+  (claude, cursor, codex, gemini, opencode, windsurf, cline, copilot);
+  ` + "`--global`" + ` installs at user scope where the tool documents one.
 
 ## When NOT to invoke
 
