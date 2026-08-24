@@ -1,17 +1,17 @@
 ci_system: github-actions
-repo: plumbline
+repo: .
 scanned_at: "1970-01-01T00:00:00Z"
 schema: plumbline/v1
 signal_set_version: v2
 signals[22]:
   - confidence: medium
     evidence[1]{excerpt,path}:
-      "# CLAUDE.md\n\nThis file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.\n\n## Project status\n\nPlumbline is in a pre-im…",CLAUDE.md
+      "# CLAUDE.md\n\nThis file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.\n\n## Project status\n\nPlumbline is **implement…",CLAUDE.md
     family: instructions
     id: l2.agent-instructions
     level: 2
     method: content-regex
-    notes[1]: CLAUDE.md has a heading and 28 non-blank lines (≥20)
+    notes[1]: CLAUDE.md has a heading and 77 non-blank lines (≥20)
     score: 1
     status: found
     title: Agent instructions present (CLAUDE.md / AGENTS.md / copilot-instructions / etc.)
