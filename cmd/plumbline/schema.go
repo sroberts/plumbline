@@ -68,7 +68,7 @@ const schemaVerdict = `{
     "tool_version": { "type": "string" },
     "signal_set_version": { "type": "string", "examples": ["v1"] },
     "ci_system": { "type": "string", "enum": ["github-actions", "auto"] },
-    "repo": { "type": "string", "description": "Absolute path to the scanned repository" },
+    "repo": { "type": "string", "description": "Path to the scanned repository. Absolute for a live assess; the fixed sentinel \".\" in a reproducible snapshot, so committed artifacts do not diff by checkout name." },
     "scanned_at": { "type": "string", "format": "date-time" },
     "verdict": {
       "type": "object",

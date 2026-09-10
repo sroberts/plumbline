@@ -60,8 +60,35 @@ plumbline [global flags] <command> [args]
 | `plumbline signals` | List every signal the tool knows how to detect. Filterable by `--level`, `--family`. Supports `--json`. | no |
 | `plumbline explain <signal-id>` | Print a signal's description, detection rule, and rationale. **Static** — does not scan a repo. | no |
 | `plumbline schema <name>` | Emit JSON Schema for a public output type (`verdict`, `signal-result`, `event`, `config`). For machine consumers. | no |
+| `plumbline fix <signal-id> [path]` | Scaffold the artifact a signal is looking for. **Dry-run by default**; `--apply` writes. `--input KEY=VALUE` (repeatable) supplies content the fix needs; unsupplied inputs get `TODO:`-marked placeholders. `--json` for a tool harness. Only some signals have fixers — see "Scaffolding scope" below. | no |
+| `plumbline install-skill [path]` | Write plumbline's own usage guide into the location a coding-agent tool expects (`--target claude\|cursor\|gemini\|codex\|opencode\|windsurf\|cline\|copilot`). **Dry-run by default**; `--apply` writes. `--global` installs under `$HOME` instead of the repo; `--list` prints targets and exits. | picker |
 | `plumbline help [topic]` | Long-form help on a topic (`signals`, `scoring`, `levels`, `output`, `config`, `ci`, `agents`, `profiles`). Output is plain markdown so an LLM agent can ingest it directly. | no |
 | `plumbline version` | Print build version + commit. Supports `--json`. | no |
+
+`fix` and `install-skill` are the only commands that write inside a target repo (§11). Both are dry-run by default and both refuse to overwrite an existing file.
+
+### Scaffolding scope
+
+**`plumbline fix` covers L2 artifacts only.** Four signals implement a fixer:
+
+| Signal | Writes |
+|---|---|
+| `l2.agent-instructions` | `CLAUDE.md` (or the `--input`-selected alternative) |
+| `l2.contributor-guide` | `CONTRIBUTING.md` |
+| `l2.pr-template` | `.github/pull_request_template.md` |
+| `l2.commit-rules` | `.gitmessage` |
+
+Every other signal returns `signal "<id>" has no fixer` and exits 2. **Plumbline generates no CI workflow files at all** — no `.github/workflows/*.yml`, at any level.
+
+That is a deliberate limit, not a backlog item. Three reasons:
+
+1. **A generator and a detector that share an author agree by construction.** If plumbline emitted the workflow plumbline recognizes, every scaffolded repo would score full marks on shapes plumbline already knew, and the tool would stop encountering the ones it doesn't. The catalog's blind spots would become invisible rather than fixed. The L3 gate deviations documented in §6 were only discoverable because the repos that exposed them wrote their own CI to solve their own problem.
+2. **It reproduces the failure mode this repo already committed once.** A `codecov.yml` was added here in #20 to satisfy `l3.coverage-gate`, with a comment conceding the repo did not upload to Codecov. A file written to satisfy a matcher rather than to gate anything is worth negative points, and a scaffolding feature that emits them at scale is that mistake with a CLI flag on it.
+3. **§2 rules out recommending specific tooling.** Any real workflow file picks a runner, a linter, an action set, and a threshold. L2 artifacts are prose templates the user rewrites; L3+ artifacts are executable choices about someone else's stack.
+
+L3+ remediation is therefore advisory: `Result.FixHint` describes the shape to build (measure → compare → fail), and `--debug` (§8.2.7) shows which probe missed so a user can tell a detector gap from a real one. **A detector gap is a bug against the detector** — the fix hints say so, and a repo should never be reshaped to match a matcher.
+
+If scaffolding above L2 is ever added, the shape that avoids reason 1: generate a clearly-labelled starting point, then re-run detection against it and report the result honestly, rather than assuming the signal is satisfied because plumbline wrote the file.
 
 ### Global flags
 
@@ -109,6 +136,8 @@ The two modes share the **exact same scanner, signal registry, and scoring engin
 | 1 | Scan completed, level < `--fail-below`. |
 | 2 | Scan could not run (path not a repo, IO error, etc.). |
 | 3 | Configuration error. |
+
+Code 1 is `assess`-only — it means the `--fail-below` gate failed, which is the CI-gating contract. The write commands never use it: `fix` and `install-skill` exit 0 on a completed plan or apply, 2 when they cannot run (unknown signal or target, signal has no fixer, file already exists, bad path), and 3 on a configuration error such as a malformed `--input`.
 
 ## 5. Architecture
 
@@ -609,20 +638,21 @@ When the user disagrees with a `Missing` verdict, they need to see what the dete
 ```
 $ plumbline assess --debug
 …
-[debug] l3.coverage-gate: stat codecov.yml                      hit=false
-[debug] l3.coverage-gate: stat .github/workflows/ci.yml         hit=true
-[debug] l3.coverage-gate: regex `--cov-fail-under` in ci.yml    hit=false
-[debug] l3.coverage-gate: regex `go tool cover -func` in ci.yml hit=false
-[debug] l3.coverage-gate: stat .github/workflows/test.yml       hit=true
-[debug] l3.coverage-gate: regex `--cov-fail-under` in test.yml  hit=false
-[debug] l3.coverage-gate: regex `go tool cover -func` in test.yml   hit=true
-[debug] l3.coverage-gate: step `coverage` env/if threshold      hit=false
-[debug] l3.coverage-gate: regex `exit 1` in step `coverage`     hit=false
-[debug] l3.coverage-gate: result = partial (score=0.67, conf=low, method=ast)
+[debug] l3.coverage-gate: stat codecov.yml                              hit=false
+[debug] l3.coverage-gate: stat .codecov.yml                            hit=false
+[debug] l3.coverage-gate: trigger `pull_request` .github/workflows/ci.yml hit=true
+[debug] l3.coverage-gate: threshold flag in a coverage step .github/workflows/ci.yml hit=true (step: Coverage gate)
+[debug] l3.coverage-gate: status=found score=1 confidence=medium method=ast
 …
 ```
 
-Each `DiagEntry` (see §6 `Result` struct) becomes one line. The `--debug` flag is the load-bearing affordance for trust: a user who sees exactly which paths were probed and which patterns ran can either fix their repo or file a precise issue against a signal.
+Each `DiagEntry` (see §6 `Result` struct) becomes one line, followed by the signal's summary line. The `--debug` flag is the load-bearing affordance for trust: a user who sees exactly which paths were probed and which patterns ran can either fix their repo or file a precise issue against a signal.
+
+**Instrumentation is per-signal and currently partial.** Detectors record probes by calling `acmm.NewDiagnostics(ctx)` and wrapping conditions in `d.Probe(path, action, hit, detail...)`; recording is a no-op unless `--debug` put a marker on the context, so the normal scan path pays nothing. Signals that have not been instrumented emit only their summary line — visibly uninstrumented rather than silently so.
+
+Instrumented today: `l3.build-lint-gate`, `l3.coverage-gate`. Adding probes to a signal is a local change and does not alter its verdict; new signals should include them.
+
+The gap this closes is concrete. A Go repo reported both L3 gates scoring 0.67 despite implementing both, and had no way to see which probe failed — the fix hint said "add a lint step" to a workflow with three. `--debug` now answers that in one command.
 
 `--debug` is also captured into the verdict JSON when both `--debug` and `--json` are set: each `signal-result` gains a `diag: [...]` array. This lets LLM agents reason about *why* a signal fired the way it did without re-running the scan.
 
@@ -696,7 +726,7 @@ Map keys are emitted in sorted order in both, keeping the artifact deterministic
 A committed artifact is only useful if it diffs cleanly — a file that churns on every scan is noise, not signal. So `snapshot` is **reproducible by default**: the two fields that vary by *when and where* the scan ran, rather than by the codebase's maturity, are normalized to stable values:
 
 - `scanned_at` → a fixed RFC3339 sentinel (`1970-01-01T00:00:00Z`). Still schema-valid (the field is required and typed `date-time`), but constant.
-- `repo` → the repository directory's base name, not the absolute path (stable across `/home/user/...` locally vs `/home/runner/work/...` in CI).
+- `repo` → the fixed sentinel `.`, not the scanned path. Base-name normalization was tried first and was not enough: it is stable across checkout *paths* but not checkout *names*, and the gate compares an artifact committed from one checkout against one regenerated in another. Git worktrees are named per-branch, forks are cloned under whatever the user typed, and CI checks out under the runner's own layout — each produced a spurious diff unrelated to maturity. `.` is honest for a committed artifact: the repo is the one the file lives in.
 
 `tool_version` and `signal_set_version` are left intact — they are intrinsic to *how* signals were scored, so a change in either is a real change worth surfacing in the diff. Re-running `snapshot` on an unchanged repo therefore produces a byte-identical file. Pass `--reproducible=false` to embed the live scan time and absolute path (for a per-run artifact you upload rather than commit).
 
@@ -881,7 +911,7 @@ The config schema lives in `internal/config` and is JSON-Schema-validated on loa
 
 ## 11. Security & sandboxing
 
-- **Read-only operation.** The tool never writes inside the target repo. Reports go to stdout or the path passed to `--out`.
+- **Read-only by default.** Assessment never writes inside the target repo; reports go to stdout or the path passed to `--out`. The two exceptions are `plumbline fix --apply` and `plumbline install-skill --apply` (§4), which are dry-run unless `--apply` is passed explicitly. Everything they write goes through `internal/fix`, which enforces: paths must resolve inside the repo root, `create-file` refuses to overwrite an existing file, and `append-file` requires the target to already exist. There is no flag that relaxes those checks.
 - **Bounded file reads.** Any single file ≥ 1 MiB is sampled (first 64 KiB only). All content access goes through `idx.Read(path)` — see §5 access contract.
 - **No subprocess execution.** Plumbline does not shell out for any reason. `git` metadata is read via go-git.
 - **No telemetry. No crash reports. No usage data. Ever.** Plumbline makes zero outbound network calls. This is a positioning commitment, not a default that can be flipped — there is no flag or env var that turns network IO on. If you see plumbline opening a socket, file a security bug.
