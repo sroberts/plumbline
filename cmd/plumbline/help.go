@@ -452,10 +452,8 @@ file. Read the signal's fix_hint for the shape to build, and use
 The single exception is 'plumbline install-ci', which writes the one
 workflow that runs plumbline itself — not a coverage gate, nightly
 suite, or triage automation. SPEC.md §4 records why the boundary sits
-there, including the part that cuts against it: the generated workflow
-scores 'partial' on l3.build-lint-gate, so plumbline does credit a file
-plumbline wrote. That is never enough to climb a level, and it does not
-mean the repo gates its own build.
+there. The generated workflow earns the repo no credit: l3.build-lint-gate
+ignores it, so plumbline never scores a repo for a file plumbline wrote.
 
 ## When to NOT use fix
 

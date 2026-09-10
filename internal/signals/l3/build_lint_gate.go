@@ -3,6 +3,7 @@ package l3
 import (
 	"context"
 	"regexp"
+	"strings"
 
 	"github.com/sroberts/plumbline/internal/scanner"
 	"github.com/sroberts/plumbline/internal/signals"
@@ -19,6 +20,17 @@ var (
 	lintRunRE = regexp.MustCompile(`(?m)\b(lint|golangci-lint|revive|staticcheck|go vet|gofmt|goimports|eslint|prettier|stylelint|black|ruff|flake8|mypy|rubocop|clippy|biome|shellcheck)\b`)
 
 	buildRunRE = regexp.MustCompile(`(?m)\b(go build|cargo build|go install|npm run build|yarn build|pnpm build|tsc|make build|cmake)\b`)
+
+	// `go install example.com/mod/cmd@v1` fetches and installs a *remote*
+	// tool — a linter, a codegen binary, plumbline itself. It compiles
+	// nothing belonging to the repo under review, so counting it as a
+	// build step claims "this repo builds in CI" about a workflow that
+	// never touches the repo's code. A local target (`go install ./cmd/x`,
+	// or a bare `go install`) does build this repo and still counts.
+	//
+	// Found by plumbline crediting its own scaffolded workflow, whose only
+	// matching line was the step that installs plumbline (SPEC.md §4).
+	goToolInstallRE = regexp.MustCompile(`\bgo install\s+\S+@\S+`)
 
 	lintActionRE = regexp.MustCompile(`(?i)(golangci-lint|golangci/|staticcheck-action|dominikh/staticcheck|eslint|stylelint|biomejs/biome|reviewdog)`)
 
@@ -57,7 +69,8 @@ func (s BuildLintGate) Detect(ctx context.Context, idx *scanner.RepoIndex) acmm.
 			w.AnyStepNameMatches(lintNameRE) || w.AnyUsesMatches(lintNameRE)) {
 			hasLint, byNameOnly = true, true
 		}
-		hasBuild := d.Probe(w.Path, "build command", w.AnyRunMatches(buildRunRE))
+		hasBuild := d.Probe(w.Path, "build command (remote `go install` tool fetches excluded)",
+			buildsThisRepo(w))
 		switch {
 		case hasLint && hasBuild:
 			res := acmm.Result{
@@ -123,4 +136,19 @@ func workflowUsesLintAction(w *workflows.File) bool {
 
 func init() {
 	signals.Default.Register(BuildLintGate{})
+}
+
+// buildsThisRepo reports whether any run body in w contains a build
+// command for the repository under review. Remote `go install` tool
+// fetches are stripped before matching, so a line that both installs a
+// tool and builds the repo still counts as a build.
+func buildsThisRepo(w *workflows.File) bool {
+	for _, st := range w.AllSteps() {
+		for _, line := range strings.Split(st.Run, "\n") {
+			if buildRunRE.MatchString(goToolInstallRE.ReplaceAllString(line, "")) {
+				return true
+			}
+		}
+	}
+	return false
 }

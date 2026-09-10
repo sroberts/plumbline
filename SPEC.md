@@ -101,11 +101,15 @@ writes no coverage gate, no nightly suite, no error-monitoring hook, no
 triage automation — none of the shapes reason 1 is about. Those remain
 advisory, via `fix_hint`.
 
-Reason 1 still partly applies and is worth stating plainly rather than
-explaining away. The generated workflow *is* detected: `l3.build-lint-gate`
-scores it `partial` (0.67), because a step that runs an assessment and
-fails the build on the result is genuinely gate-shaped. So plumbline does
-credit a file plumbline wrote.
+Reason 1 once applied in practice and no longer does. The generated
+workflow used to score `partial` (0.67) on `l3.build-lint-gate` — not
+because running an assessment is gate-shaped, but because the step that
+installs plumbline, `go install <module>@latest`, matched the build
+vocabulary. That was a detector bug with a general blast radius: any
+repo whose CI installs a Go tool that way scored as if it built its own
+code. `go install` of a remote module is now excluded (a local target
+still counts), so **the scaffolded workflow earns no credit at all** and
+plumbline does not credit a file plumbline wrote.
 
 Two things bound the damage, and one test enforces the bound:
 
@@ -113,18 +117,16 @@ Two things bound the damage, and one test enforces the bound:
   satisfied a matcher while gating nothing. This workflow really does run
   on every PR and really does fail the build — the loop it claims exists,
   exists.
-- Partial credit on one L3 signal cannot carry a level on its own.
-  `TestInstallCI_CannotBootstrapALevel` asserts that installing the
-  workflow leaves the verdict unmoved; if a catalog change ever makes
-  self-installation enough to climb a level, that test fails.
+- The workflow earns nothing, so it cannot carry a level.
+  `TestInstallCI_CannotBootstrapALevel` asserts both halves: the
+  scaffolded workflow leaves `l3.build-lint-gate` `missing`, and the
+  verdict is unmoved. If a future catalog change ever re-credits it, that
+  test fails.
 
 What the carve-out does **not** license: crediting a repo for gating its
 own build when all it gates is plumbline. A repo whose tests still do not
-run in CI is not a Measured codebase because it installed this file. A
-future catalog revision that distinguishes "gates the repo's own build"
-from "gates something" would be the principled fix; until then the
-partial score is the honest one — the shape is there, the coverage of it
-is not.
+run in CI is not a Measured codebase because it installed this file, and
+the catalog now says so.
 
 ### Global flags
 

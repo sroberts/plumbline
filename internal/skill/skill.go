@@ -312,9 +312,9 @@ interface; an interactive Bubble Tea TUI is also available on terminals.
    **This is the only workflow plumbline generates** — the one that runs
    plumbline. Do not expect it to scaffold a coverage gate, nightly
    suite, or triage automation; those remain advisory via ` + "`fix_hint`" + `.
-   It scores ` + "`partial`" + ` on ` + "`l3.build-lint-gate`" + `, which is
-   plumbline crediting its own file — never tell a user that installing
-   it means their repo gates its own build.
+   It earns the repo no credit — ` + "`l3.build-lint-gate`" + ` ignores
+   it — so never tell a user that installing it means their repo gates
+   its own build.
 
 6. **Discover the catalog.**
 

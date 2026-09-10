@@ -129,22 +129,22 @@ func TestInstallCI_RejectsBadInput(t *testing.T) {
 }
 
 // TestInstallCI_CannotBootstrapALevel guards the boundary SPEC.md §4
-// draws around this command. plumbline writing a workflow that plumbline
-// then credits is the circularity the scaffolding-scope rule exists to
-// prevent, so the one thing installing it must never do is move the
-// repo's own verdict.
+// draws around this command: plumbline must never score a repo for a file
+// plumbline wrote.
 //
-// The fixture has to be an L2 repo, and that is the whole point of it.
-// An L1 repo cannot move no matter what an L3 signal does — levels are
-// sequential, so unmet L2 pins the verdict at 1 and the assertion holds
-// for a reason that has nothing to do with the behavior under test. The
-// test asserted exactly that vacuous thing until code review caught it.
-// From L2, partial credit on an L3 signal is genuinely the kind of thing
-// that could push a verdict, so the assertion has teeth.
+// It used to assert a weaker thing — that the scaffolded workflow scored
+// `partial` but could not carry a level. That partial credit turned out
+// to be a detector bug: the workflow's only build-shaped line was the
+// `go install <module>@latest` that fetches plumbline, and a remote tool
+// fetch builds nothing belonging to the repo. With that excluded, the
+// workflow earns nothing, and both halves are worth pinning.
 //
-// Both halves matter: the signal must actually flip (or the workflow
-// isn't being detected at all, and the test would pass for the wrong
-// reason again), and the verdict must not.
+// The fixture is an L2 repo on purpose. An L1 repo cannot move whatever
+// an L3 signal does — levels are sequential, so unmet L2 pins the verdict
+// at 1 and the assertion would hold for a reason unrelated to the
+// behavior under test. This test asserted exactly that vacuous thing
+// until code review caught it. From L2, credit at L3 is genuinely the
+// kind of thing that could push a verdict, so the assertion has teeth.
 func TestInstallCI_CannotBootstrapALevel(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "README.md", "# r\n")
@@ -168,13 +168,13 @@ func TestInstallCI_CannotBootstrapALevel(t *testing.T) {
 
 	_, after, _ := runCLI(t, "assess", "--report", "json", dir)
 
-	if got := signalStatus(t, after, "l3.build-lint-gate"); got != "partial" {
-		t.Errorf("l3.build-lint-gate = %q after installing the workflow, want partial; "+
-			"if the workflow is no longer detected at all, this test passes for the wrong reason", got)
+	if got := signalStatus(t, after, "l3.build-lint-gate"); got != "missing" {
+		t.Errorf("l3.build-lint-gate = %q after installing plumbline's own workflow, want missing; "+
+			"the workflow installs plumbline and runs it — it does not build or lint this repo, "+
+			"and crediting it would be plumbline scoring a file plumbline wrote", got)
 	}
 	if lvl := levelOf(t, after); lvl != 2 {
-		t.Errorf("installing plumbline's own workflow moved the verdict from L2 to L%d; "+
-			"a tool must not be able to raise a repo's score by writing a file it then credits", lvl)
+		t.Errorf("installing plumbline's own workflow moved the verdict from L2 to L%d", lvl)
 	}
 }
 
