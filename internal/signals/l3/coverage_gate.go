@@ -45,19 +45,23 @@ func (CoverageGate) Level() acmm.Level { return acmm.LevelMeasured }
 func (CoverageGate) Family() string    { return "coverage" }
 func (CoverageGate) Title() string     { return "Coverage gate fails CI below a threshold" }
 
-func (s CoverageGate) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Result {
+func (s CoverageGate) Detect(ctx context.Context, idx *scanner.RepoIndex) acmm.Result {
+	d := acmm.NewDiagnostics(ctx)
+
 	// 1. codecov.yml / .codecov.yml / .codecov.yaml with a target.
 	for _, p := range []string{"codecov.yml", ".codecov.yml", ".codecov.yaml"} {
-		if data := readOrEmpty(idx, p); len(data) > 0 {
-			if codecovTargetRE.Match(data) {
-				return acmm.Result{
-					Status:     acmm.StatusFound,
-					Score:      acmm.ScoreFound,
-					Confidence: acmm.ConfidenceMedium,
-					Method:     acmm.MethodContentRegex,
-					Evidence:   []acmm.Evidence{{Path: p, Excerpt: string(bytes.TrimSpace(data[:min(160, len(data))]))}},
-				}
-			}
+		data := readOrEmpty(idx, p)
+		if !d.Probe(p, "stat", len(data) > 0) {
+			continue
+		}
+		if d.Probe(p, "regex `target:`", codecovTargetRE.Match(data)) {
+			return d.Attach(acmm.Result{
+				Status:     acmm.StatusFound,
+				Score:      acmm.ScoreFound,
+				Confidence: acmm.ConfidenceMedium,
+				Method:     acmm.MethodContentRegex,
+				Evidence:   []acmm.Evidence{{Path: p, Excerpt: string(bytes.TrimSpace(data[:min(160, len(data))]))}},
+			})
 		}
 	}
 
@@ -67,23 +71,25 @@ func (s CoverageGate) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Res
 	// thresholds — plumbline's own `--fail-below 3` maturity gate matched
 	// here and scored the repo a coverage gate it did not have.
 	for _, w := range idx.Workflows {
-		if !w.HasPullRequestTrigger() {
+		if !d.Probe(w.Path, "trigger `pull_request`", w.HasPullRequestTrigger()) {
 			continue
 		}
 		for _, s := range w.AllSteps() {
 			if s.Run == "" || !coverageThresholdRE.MatchString(s.Run) {
 				continue
 			}
-			if !coverageContextRE.MatchString(s.Run) && !envMatchesRE(s.Env, coverageContextRE) {
+			inContext := coverageContextRE.MatchString(s.Run) || envMatchesRE(s.Env, coverageContextRE)
+			if !d.Probe(w.Path, "threshold flag in a coverage step", inContext,
+				"step: "+stepLabel(s)) {
 				continue
 			}
-			return acmm.Result{
+			return d.Attach(acmm.Result{
 				Status:     acmm.StatusFound,
 				Score:      acmm.ScoreFound,
 				Confidence: acmm.ConfidenceMedium,
 				Method:     acmm.MethodAST,
 				Evidence:   []acmm.Evidence{{Path: w.Path}},
-			}
+			})
 		}
 	}
 
@@ -92,34 +98,35 @@ func (s CoverageGate) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Res
 		if !w.HasPullRequestTrigger() {
 			continue
 		}
-		if note, ok := goCoverageGate(w); ok {
-			return acmm.Result{
+		note, ok := goCoverageGate(w)
+		if d.Probe(w.Path, "hand-rolled gate (measure + compare + fail)", ok, note) {
+			return d.Attach(acmm.Result{
 				Status:     acmm.StatusFound,
 				Score:      acmm.ScoreFound,
 				Confidence: acmm.ConfidenceMedium,
 				Method:     acmm.MethodAST,
 				Evidence:   []acmm.Evidence{{Path: w.Path}},
 				Notes:      []string{note},
-			}
+			})
 		}
 	}
 
 	// 4. Any workflow that mentions a coverage tool but no threshold —
 	// partial credit, since the loop is wired but the gate isn't.
 	for _, w := range idx.Workflows {
-		if w.RawContains("coverage") || w.RawContains("--cover") {
-			return acmm.Result{
+		if d.Probe(w.Path, "mentions coverage at all", w.RawContains("coverage") || w.RawContains("--cover")) {
+			return d.Attach(acmm.Result{
 				Status:     acmm.StatusPartial,
 				Score:      acmm.ScoreIncomplete,
 				Confidence: acmm.ConfidenceLow,
 				Method:     acmm.MethodContentRegex,
 				Evidence:   []acmm.Evidence{{Path: w.Path}},
 				Notes:      []string{"coverage runs but no threshold flag detected"},
-			}
+			})
 		}
 	}
 
-	return acmm.Result{
+	return d.Attach(acmm.Result{
 		Status:     acmm.StatusMissing,
 		Score:      acmm.ScoreMissing,
 		Confidence: acmm.ConfidenceMedium,
@@ -135,7 +142,19 @@ func (s CoverageGate) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Res
 			"compare it against a floor, and exit 1 below it. A codecov.yml " +
 			"target also counts, but only if you actually upload to Codecov — " +
 			"committing one to satisfy this signal buys a score, not a gate.",
+	})
+}
+
+// stepLabel names a step for diagnostics: its name if the author gave it
+// one, otherwise the action it uses.
+func stepLabel(s workflows.Step) string {
+	if s.Name != "" {
+		return s.Name
 	}
+	if s.Uses != "" {
+		return s.Uses
+	}
+	return "unnamed run step"
 }
 
 // goCoverageGate recognizes the two shapes a hand-rolled Go coverage gate

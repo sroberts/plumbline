@@ -4,46 +4,102 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Implemented and shipping. 22 signals across L2–L5, a TUI and a CLI at feature parity, and CI that gates itself on its own output.
+Plumbline is **implemented and shipping**. It is a Go module
+(`github.com/sroberts/plumbline`, Go 1.26.1) with a Cobra CLI, a Bubble Tea
+TUI, a 23-signal detector catalog, GoReleaser packaging, and nine CI
+workflows. It assesses itself at ACMM Level 5.
 
-### Commands
+`SPEC.md` is the implementation contract — numbered sections, cited
+throughout the source (`SPEC.md §6` = signal model, `§7` = scoring, `§9` =
+output formats). Read the relevant section before changing behavior it
+pins. The ACMM paper is the *model* source; SPEC.md is what plumbline
+actually does, and §6's "Deviations from the source paper" records where
+the two diverge on purpose. It is a contract, not a sketch: change it in
+the same commit as the behavior it describes.
 
+## Build & test
+
+```bash
+make build      # binary with version ldflags
+make test       # unit + E2E
+make test-race  # race detector
+make lint       # gofmt + go vet (golangci-lint if installed)
 ```
-make build          # -> ./plumbline
-make test           # go test ./...
-make test-race      # go test -race ./...
-make vet lint       # go vet; golangci-lint if installed
-go test ./internal/signals/l3/   # one package
-```
 
-### Layout
+`CONTRIBUTING.md` has the full pre-PR checklist and the package-by-package
+"where things live" map — read it rather than rediscovering the layout.
 
-| Path | What lives there |
-|---|---|
-| `cmd/plumbline/` | Cobra commands: `assess`, `snapshot`, `diff`, `inspect`, `signals`, `explain`, `schema`, `help` |
-| `cmd/gen-signal-docs/` | Regenerates `docs/SIGNALS.md` from the registry |
-| `internal/signals/l2…l5/` | One file per signal; `init()` registers into `signals.Default` |
-| `internal/workflows/` | GitHub Actions YAML → CI-agnostic AST |
-| `internal/scanner/` | Repo walk + file index |
-| `internal/scoring/` | Level math (§7) |
-| `internal/report/` | toon / json / yaml / markdown / sarif encoders, snapshot decode, diff |
-| `internal/tui/` | Bubble Tea UI |
-| `pkg/acmm/` | Public types: `Result`, `Status`, `Score`, `Confidence`, `Method` |
+## Architecture in brief
 
-### Invariants worth knowing before you edit
+- `pkg/acmm` — the public types. Anything here is `--json` surface and part
+  of the compatibility contract.
+- `internal/scanner` — the single IO chokepoint. Signals read the
+  `RepoIndex`, never the filesystem directly.
+- `internal/signals/lN/<id>.go` — one file per detector, self-registering
+  via `init()`. The level packages are blank-imported from
+  `cmd/plumbline/registrations.go` and `cmd/gen-signal-docs/main.go`; a new
+  level package needs adding to both.
+- `internal/signals.Fixer` — an *optional* interface. Most signals don't
+  implement it, and `plumbline fix <id>` correctly exits 2 for those.
+  Don't add a fixer for a signal whose remedy needs real judgment (which
+  monitoring SDK, which triage rules) — the `fix_hint` prose is the answer
+  there.
+- `internal/workflows` — GitHub Actions YAML parsed into a CI-agnostic
+  AST. Workflow signals go through it, never raw YAML regex; if the AST
+  cannot express what a detector needs, extend the AST.
+- `internal/badge` — the SVG `plumbline badge` writes. Self-contained (no
+  shields.io round-trip); output must stay byte-stable or the drift gate
+  churns.
+- `internal/ciworkflow` — the workflow `plumbline install-ci` writes, and
+  the variant registry behind both the CLI `--list` and the TUI `[w]`
+  picker. The *only* workflow plumbline generates; read SPEC.md §4 "The
+  one carve-out" before widening it.
+- `internal/fix` — where `fix`, `install-skill`, and `install-ci` write
+  inside a target repo. Refuses overwrite; in-repo paths only. `plumbline
+  badge` is the one writer that bypasses it, because regenerating in place
+  is the point — it refuses any `--out` target that exists without the
+  generated-file marker.
 
-- **`SPEC.md` is the contract**, not a sketch. Detection rules, scoring, output schemas, and the deviations from the paper all live there. Change it in the same commit as the behavior.
-- **Workflow signals go through `internal/workflows`**, never raw YAML regex. If the AST can't express what you need, extend the AST.
-- **`.plumbline.toon` is drift-gated in CI.** Any change that moves plumbline's own assessment must be committed alongside: `plumbline snapshot --out .plumbline.toon .`
-- **`docs/SIGNALS.md` is generated.** Run `go run ./cmd/gen-signal-docs -out docs/SIGNALS.md`; don't hand-edit.
-- **Signal IDs are public API.** Renames need a deprecation alias for at least one minor version.
-- **Detector gaps are bugs against the detector.** A repo with a working feedback loop that plumbline scores as missing is a defect here, not a prompt for the user to reshape their CI. See SPEC.md §6 "Deviations from the source paper" for how that principle got written down the hard way.
+## Generated and derived files — don't hand-edit
+
+- `docs/SIGNALS.md` — generated by `cmd/gen-signal-docs`. Regenerate with
+  `go run ./cmd/gen-signal-docs -out docs/SIGNALS.md`;
+  `.github/workflows/docs-signals.yml` opens a PR when it drifts.
+- `.plumbline.toon` — the committed self-assessment snapshot.
+  `.github/workflows/verdict-delta.yml` diffs a fresh head snapshot against
+  the base commit's copy to post a PR maturity delta. Regenerate with
+  `plumbline snapshot` when the catalog or this repo's artifacts change.
+- `.claude/skills/plumbline/SKILL.md` — generated by
+  `plumbline install-skill`; `.claude/` is gitignored, so the *source of
+  truth is `internal/skill/skill.go`*. Edit the const there, rebuild, then
+  reinstall. Editing the SKILL.md alone loses the change.
+- `.plumbline-badge.svg` — the committed status badge the README links.
+  Regenerate with `plumbline badge`; `.github/workflows/maturity.yml`
+  fails if the committed copy is stale *or untracked*.
+- `.coverage-floor` — a one-way ratchet (currently 60). CI enforces it;
+  `coverage-ratchet.yml` raises it 1pp when coverage runs 3pp clear. Never
+  lower it to make a build pass.
+
+**Signal IDs are public API.** A rename needs a deprecation alias that
+rewrites and warns for at least one minor version (`internal/signals/aliases.go`).
+
+**A detector gap is a bug against the detector.** A repo with a working
+feedback loop that plumbline scores as missing is a defect here, not a
+prompt for the user to reshape their CI to match a matcher. `--debug`
+prints which probe missed, so a gap can be told from a real absence. See
+SPEC.md §6 "Deviations from the source paper" for how that principle got
+written down the hard way.
+
+**Adding a signal is not a single-file change.** The detector is one file,
+but the skill body in `internal/skill/skill.go` hand-lists every signal ID,
+and `TestSkillBodyListsEverySignal` fails if you forget it. That test
+exists because `l3.metrics-acted-on` shipped missing from the list.
 
 ## What Plumbline is
 
-A standalone Go CLI that performs a **repo-level AI coding readiness assessment** based on the **AI Codebase Maturity Model (ACMM)** from `the_ai_codebase_maturity_model.md`. Given a target repository path, it should detect which feedback-loop artifacts are present and report the codebase's ACMM level.
+A standalone Go CLI that performs a **repo-level AI coding readiness assessment** based on the **AI Codebase Maturity Model (ACMM)** from `the_ai_codebase_maturity_model.md`. Given a target repository path, it detects which feedback-loop artifacts are present and reports the codebase's ACMM level.
 
-The Markdown paper is the **specification**. When designing detection logic, scoring, or report output, treat that document as authoritative and reference its tables (especially the *Complete Feedback Loop Inventory*) rather than reasoning from the README alone.
+The Markdown paper is authoritative for **the model** — what a level means, which loop topology defines it. When designing new detection logic, reason from its tables (especially the *Complete Feedback Loop Inventory*) rather than from the README. It is not authoritative for plumbline's behavior; SPEC.md is, and it deviates from the paper deliberately in places.
 
 ## ACMM in one screen (what the tool must detect)
 
@@ -63,8 +119,8 @@ The author's KubeStellar Console reference points (paths and cron cadences) are 
 
 Two anti-patterns the assessor should also flag:
 
-- **Dashboard graveyard** (L3 anti-pattern): metrics collected, never acted on. Detected by `l3.metrics-acted-on`, which inverts the framing rather than the score — it asks whether collected numbers are acted on, and returns `Missing` for the graveyard so `Found` keeps meaning "good" everywhere in the catalog.
-- **Autonomy without guardrails** (L4 anti-pattern): automation present, but the L3 measurement layer it depends on is missing — a level cannot be skipped. **No detector yet.**
+- **Dashboard graveyard** (L3 anti-pattern): metrics collected, never acted on. Detected by `l3.metrics-acted-on`, which inverts the *framing* rather than the score — it asks whether collected numbers gate anything, so `Found` keeps meaning "good" everywhere in the catalog.
+- **Autonomy without guardrails** (L4 anti-pattern): automation present, but the L3 measurement layer it depends on is missing — a level cannot be skipped. Detected by `l4.measurement-backed`.
 
 ## Working norms specific to this repo
 

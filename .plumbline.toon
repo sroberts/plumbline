@@ -1,17 +1,17 @@
 ci_system: github-actions
-repo: plumbline
+repo: .
 scanned_at: "1970-01-01T00:00:00Z"
 schema: plumbline/v1
 signal_set_version: v2
-signals[22]:
+signals[23]:
   - confidence: medium
     evidence[1]{excerpt,path}:
-      "# CLAUDE.md\n\nThis file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.\n\n## Project status\n\nImplemented and shipping…",CLAUDE.md
+      "# CLAUDE.md\n\nThis file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.\n\n## Project status\n\nPlumbline is **implement…",CLAUDE.md
     family: instructions
     id: l2.agent-instructions
     level: 2
     method: content-regex
-    notes[1]: CLAUDE.md has a heading and 51 non-blank lines (≥20)
+    notes[1]: CLAUDE.md has a heading and 102 non-blank lines (≥20)
     score: 1
     status: found
     title: Agent instructions present (CLAUDE.md / AGENTS.md / copilot-instructions / etc.)
@@ -108,9 +108,10 @@ signals[22]:
     status: found
     title: Flaky-test tracking workflow or report file
   - confidence: medium
-    evidence[2]{excerpt,path}:
+    evidence[3]{excerpt,path}:
       upload coverage artifact,.github/workflows/coverage-nightly.yml
       coverage hard floor (catastrophic regression block),.github/workflows/ci.yml
+      report ratchet result when the PR could not be opened,.github/workflows/coverage-ratchet.yml
     family: metrics
     id: l3.metrics-acted-on
     level: 3
@@ -159,6 +160,20 @@ signals[22]:
     score: 1
     status: found
     title: Workflow retries failures with backoff or continue-on-error
+  - confidence: medium
+    evidence[4]{excerpt,path}:
+      open ratchet PR,.github/workflows/coverage-ratchet.yml
+      open follow-up PR if drift,.github/workflows/docs-signals.yml
+      assess + verdict gate,.github/workflows/canary-repos.yml
+      gofmt,.github/workflows/ci.yml
+    family: guardrails
+    id: l4.measurement-backed
+    level: 4
+    method: ast
+    notes[2]: repo-modifying automation exists alongside a blocking push/PR gate,"does not verify the gate covers what the automation touches, or that branch protection requires it"
+    score: 1
+    status: found
+    title: Repo-modifying automation is backed by a blocking gate
   - confidence: high
     evidence[1]{path}:
       .github/workflows/coverage-ratchet.yml
@@ -235,7 +250,7 @@ verdict:
   level_scores:
     "2": 1
     "3": 0.7777777777777778
-    "4": 0.8
+    "4": 0.8333333333333334
     "5": 0.75
   min_confidence_applied: low
   name: Self-Sustaining

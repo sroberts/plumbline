@@ -62,14 +62,23 @@ type WorkflowRunTrigger struct {
 
 // Job is one entry under `jobs:`.
 type Job struct {
-	ID          string
-	Name        string
-	RunsOn      string
-	If          string
+	ID     string
+	Name   string
+	RunsOn string
+	If     string
+	// Uses is the job-level `uses:` — a call to a reusable workflow.
+	// Such a job has no `steps:` at all, so a detector that only walks
+	// steps sees an empty job and concludes the work isn't happening.
+	Uses        string
+	With        map[string]string // inputs passed to the reusable workflow
 	Env         map[string]string // job-level `env:`
 	Steps       []Step
 	Permissions map[string]string
 }
+
+// IsReusableCall reports whether this job delegates to a reusable
+// workflow rather than running steps of its own.
+func (j Job) IsReusableCall() bool { return j.Uses != "" }
 
 // Step is one entry in `steps:`.
 type Step struct {
@@ -159,8 +168,29 @@ func (f *File) CronEntries() []string {
 // `uses:` starts with the given prefix (e.g. "peter-evans/create-pull-request").
 func (f *File) UsesAction(prefix string) bool {
 	for _, j := range f.Jobs {
+		if strings.HasPrefix(j.Uses, prefix) {
+			return true
+		}
 		for _, s := range j.Steps {
 			if strings.HasPrefix(s.Uses, prefix) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// AnyUsesMatches reports whether any `uses:` in the file matches re, at
+// either step or job scope. Job scope is the reusable-workflow call:
+// `jobs.lint.uses: org/.github/.github/workflows/lint.yml@main` does the
+// work of a lint job while containing no steps to walk.
+func (f *File) AnyUsesMatches(re *regexp.Regexp) bool {
+	for _, j := range f.Jobs {
+		if j.Uses != "" && re.MatchString(j.Uses) {
+			return true
+		}
+		for _, s := range j.Steps {
+			if s.Uses != "" && re.MatchString(s.Uses) {
 				return true
 			}
 		}
@@ -438,6 +468,8 @@ type rawJob struct {
 	Name        string            `yaml:"name"`
 	RunsOn      yaml.Node         `yaml:"runs-on"`
 	If          string            `yaml:"if"`
+	Uses        string            `yaml:"uses"`
+	With        map[string]string `yaml:"with"`
 	Env         map[string]string `yaml:"env"`
 	Steps       []rawStep         `yaml:"steps"`
 	Permissions map[string]string `yaml:"permissions"`
@@ -462,6 +494,8 @@ func (r rawJob) toJob(id string) Job {
 		Name:        r.Name,
 		RunsOn:      runsOn,
 		If:          r.If,
+		Uses:        r.Uses,
+		With:        r.With,
 		Env:         r.Env,
 		Steps:       steps,
 		Permissions: r.Permissions,

@@ -462,3 +462,59 @@ jobs:
 		t.Errorf("status = %v, want missing — gofmt's exit 1 acts on no metric", got.Status)
 	}
 }
+
+// The verdict must not depend on whether diagnostics are being recorded.
+// Probe wraps the conditions the detector branches on, so a mistake there
+// would change behaviour under --debug only — the worst kind to find.
+func TestDiagnosticsDoNotChangeVerdicts(t *testing.T) {
+	fixtures := map[string]fstest.MapFS{
+		"go toolchain":  {".github/workflows/ci.yml": {Data: []byte(goToolchainCI)}},
+		"split gate":    {".github/workflows/ci.yml": {Data: []byte(splitCoverageGateCI)}},
+		"ungated":       {".github/workflows/ci.yml": {Data: []byte(coverageReportedNotGated)}},
+		"maturity gate": {".github/workflows/canary.yml": {Data: []byte(maturityGateCI)}},
+		"empty":         {},
+	}
+	for name, files := range fixtures {
+		for _, d := range []detector{BuildLintGate{}, CoverageGate{}} {
+			idx, err := scanner.ScanFS(files, "/repo")
+			if err != nil {
+				t.Fatalf("ScanFS: %v", err)
+			}
+			plain := d.Detect(context.Background(), idx)
+			debug := d.Detect(acmm.WithDiagnostics(context.Background()), idx)
+			if plain.Score != debug.Score || plain.Status != debug.Status || plain.Confidence != debug.Confidence {
+				t.Errorf("%s/%T: verdict differs under --debug: %v/%v vs %v/%v",
+					name, d, plain.Status, plain.Score, debug.Status, debug.Score)
+			}
+			if len(debug.Diag) == 0 && len(files) > 0 {
+				t.Errorf("%s/%T: no probes recorded under --debug", name, d)
+			}
+			if len(plain.Diag) != 0 {
+				t.Errorf("%s/%T: probes recorded without --debug", name, d)
+			}
+		}
+	}
+}
+
+// Splitting lint into a shared org workflow is a normal layout, and the
+// calling job has no steps for the detector to read — only a path.
+func TestBuildLintGateSeesReusableLintWorkflow(t *testing.T) {
+	files := fstest.MapFS{".github/workflows/ci.yml": {Data: []byte(`
+name: CI
+on: [pull_request]
+jobs:
+  lint:
+    uses: acme/.github/.github/workflows/golangci-lint.yml@main
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: go build ./...
+`)}}
+	got := runOn(t, BuildLintGate{}, files)
+	if got.Score != acmm.ScoreFound {
+		t.Errorf("score = %v, want %v (notes: %v)", got.Score, acmm.ScoreFound, got.Notes)
+	}
+	if got.Confidence != acmm.ConfidenceMedium {
+		t.Errorf("confidence = %v, want medium — golangci-lint in the path is a real match, not a name guess", got.Confidence)
+	}
+}

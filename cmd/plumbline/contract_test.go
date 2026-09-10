@@ -22,6 +22,8 @@ func TestHelpTextContract(t *testing.T) {
 		{"signals", []string{"signals", "--help"}, true, true},
 		{"explain", []string{"explain", "--help"}, true, true},
 		{"schema", []string{"schema", "--help"}, false, true},
+		{"badge", []string{"badge", "--help"}, true, true},
+		{"install-ci", []string{"install-ci", "--help"}, true, true},
 		{"help", []string{"help", "--help"}, false, false},
 		{"version", []string{"version", "--help"}, true, true},
 	}

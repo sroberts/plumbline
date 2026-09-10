@@ -53,7 +53,35 @@ CI (`.github/workflows/ci.yml`) runs the same gate on every PR.
 - **Workflows AST:** `internal/workflows` — GitHub Actions YAML parser.
 - **Embedded skill bodies:** `internal/skill` — what
   `plumbline install-skill` writes for each agent target.
+- **Badge rendering:** `internal/badge` — the SVG `plumbline badge`
+  writes. Self-contained by design (no shields.io round-trip); output
+  must stay byte-stable or the drift gate churns.
+- **CI workflow scaffolding:** `internal/ciworkflow` — the workflow
+  `plumbline install-ci` writes, plus the variant registry the CLI
+  `--list` and the TUI `[w]` picker both render. This is the *only*
+  workflow plumbline generates; see SPEC.md §4 "The one carve-out"
+  before widening it.
 - **TUI:** `internal/tui` — Bubble Tea screens + picker flows.
+
+## Repository settings the automation depends on
+
+Some workflows need repo settings that a `permissions:` block cannot grant.
+If you fork this repo, or if one of these loops goes quiet, check here first.
+
+| Setting | Where | Needed by | Symptom when off |
+|---|---|---|---|
+| Allow GitHub Actions to create and approve pull requests | Settings → Actions → General → Workflow permissions | `coverage-ratchet.yml`, `docs-signals.yml`, `canary-repos.yml` | `GitHub Actions is not permitted to create or approve pull requests` — the run fails at its final step, having done all the work |
+
+That last symptom is worth dwelling on. The coverage ratchet failed this way
+on every weekly run from June to August: it measured coverage, decided a
+bump, wrote the floor file, and died opening the PR. Nothing surfaced it,
+because nobody watches a scheduled workflow that has always been red. The
+floor sat at 60 the whole time — not because coverage never rose, but
+because the thing that raises it could never finish.
+
+The ratchet now files an issue when the PR step fails, so its output
+survives the setting being off. That is a mitigation, not a fix: the loop
+only closes once the setting is on.
 
 ## Style
 

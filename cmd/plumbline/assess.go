@@ -309,6 +309,9 @@ type pipelineOptions struct {
 	Events        *report.EventEmitter
 	Debug         bool
 	DebugStderr   io.Writer
+	// IncludeDiagInReport puts recorded probes into the report itself
+	// rather than only on stderr. Off for assess; on for inspect.
+	IncludeDiagInReport bool
 
 	// ExtraSignals are signals not registered in signals.Default —
 	// typically external plugins loaded for this run only. They run
@@ -388,6 +391,9 @@ func runAssessWithIndex(ctx context.Context, path string, opts pipelineOptions) 
 		registered = append(registered, opts.ExtraSignals...)
 	}
 	if opts.Debug {
+		// Detectors record probes only when the context asks for them,
+		// so the normal scan path pays nothing for this.
+		ctx = acmm.WithDiagnostics(ctx)
 		fmt.Fprintf(opts.DebugStderr, "[debug] scanned %s: %d files, %d workflows\n",
 			abs, len(idx.Files), len(idx.Workflows))
 	}
@@ -420,7 +426,14 @@ func runAssessWithIndex(ctx context.Context, path string, opts pipelineOptions) 
 			Evidence:   r.Evidence,
 			Notes:      r.Notes,
 			FixHint:    r.FixHint,
-			Diag:       r.Diag,
+		}
+		// Probes go to stderr, never stdout: SPEC.md §4 promises --debug
+		// "does not change stdout — gate output stays stable", so a CI
+		// gate can add --debug to a failing run without its JSON moving.
+		// `inspect` opts in explicitly, since its whole output is one
+		// signal a human is already reading.
+		if opts.IncludeDiagInReport {
+			entry.Diag = r.Diag
 		}
 		results = append(results, entry)
 
@@ -428,6 +441,23 @@ func runAssessWithIndex(ctx context.Context, path string, opts pipelineOptions) 
 			opts.Events.SignalComplete(entry, dur.Milliseconds())
 		}
 		if opts.Debug {
+			// Probe-level lines first, then the summary they explain.
+			// A signal that records nothing still gets its summary, and
+			// is visibly uninstrumented rather than silently so.
+			for _, e := range r.Diag {
+				if e.Action == "result" {
+					continue
+				}
+				line := fmt.Sprintf("[debug] %s: %s", s.ID(), e.Action)
+				if e.Path != "" {
+					line = fmt.Sprintf("[debug] %s: %s %s", s.ID(), e.Action, e.Path)
+				}
+				fmt.Fprintf(opts.DebugStderr, "%-70s hit=%v", line, e.Hit)
+				if e.Detail != "" {
+					fmt.Fprintf(opts.DebugStderr, " (%s)", e.Detail)
+				}
+				fmt.Fprintln(opts.DebugStderr)
+			}
 			fmt.Fprintf(opts.DebugStderr, "[debug] %s: status=%s score=%v confidence=%s method=%s\n",
 				s.ID(), r.Status, r.Score, r.Confidence, r.Method)
 		}
