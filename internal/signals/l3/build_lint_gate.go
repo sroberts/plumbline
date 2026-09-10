@@ -37,20 +37,27 @@ func (BuildLintGate) Level() acmm.Level { return acmm.LevelMeasured }
 func (BuildLintGate) Family() string    { return "ci-gate" }
 func (BuildLintGate) Title() string     { return "CI workflow runs build and lint on push or PR" }
 
-func (s BuildLintGate) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Result {
+func (s BuildLintGate) Detect(ctx context.Context, idx *scanner.RepoIndex) acmm.Result {
+	d := acmm.NewDiagnostics(ctx)
 	bestScore := acmm.ScoreMissing
 	var bestPath, missingHalf string
 
 	for _, w := range idx.Workflows {
-		if !(w.HasPushTrigger() || w.HasPullRequestTrigger()) {
+		if !d.Probe(w.Path, "trigger `push` or `pull_request`",
+			w.HasPushTrigger() || w.HasPullRequestTrigger()) {
 			continue
 		}
-		hasLint := w.AnyRunMatches(lintRunRE) || workflowUsesLintAction(w)
+		hasLint := d.Probe(w.Path, "linter command or lint action",
+			w.AnyRunMatches(lintRunRE) || workflowUsesLintAction(w))
 		byNameOnly := false
-		if !hasLint && w.AnyStepNameMatches(lintNameRE) {
+		// A job that delegates to a reusable workflow has no steps to
+		// walk, so its path is the only evidence of what it does:
+		// `jobs.lint.uses: org/.github/.github/workflows/lint.yml@main`.
+		if !hasLint && d.Probe(w.Path, "job/step named lint|vet|fmt (fallback)",
+			w.AnyStepNameMatches(lintNameRE) || w.AnyUsesMatches(lintNameRE)) {
 			hasLint, byNameOnly = true, true
 		}
-		hasBuild := w.AnyRunMatches(buildRunRE)
+		hasBuild := d.Probe(w.Path, "build command", w.AnyRunMatches(buildRunRE))
 		switch {
 		case hasLint && hasBuild:
 			res := acmm.Result{
@@ -65,7 +72,7 @@ func (s BuildLintGate) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Re
 				res.Notes = append(res.Notes,
 					"lint step identified by job/step name only — no recognized linter command")
 			}
-			return res
+			return d.Attach(res)
 		case hasLint || hasBuild:
 			if acmm.ScoreIncomplete > bestScore {
 				bestScore = acmm.ScoreIncomplete
@@ -79,7 +86,7 @@ func (s BuildLintGate) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Re
 	}
 
 	if bestScore == acmm.ScoreMissing {
-		return acmm.Result{
+		return d.Attach(acmm.Result{
 			Status:     acmm.StatusMissing,
 			Score:      acmm.ScoreMissing,
 			Confidence: acmm.ConfidenceMedium,
@@ -88,9 +95,9 @@ func (s BuildLintGate) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Re
 			FixHint: "Add a CI workflow on push/pull_request that builds the " +
 				"project AND runs a linter (golangci-lint, eslint, etc.). " +
 				"Both steps gate every PR — it's the L3 baseline.",
-		}
+		})
 	}
-	return acmm.Result{
+	return d.Attach(acmm.Result{
 		Status:     acmm.StatusFromScore(bestScore),
 		Score:      bestScore,
 		Confidence: acmm.ConfidenceMedium,
@@ -100,7 +107,7 @@ func (s BuildLintGate) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Re
 		FixHint: "Add a " + missingHalf + " step to " + bestPath + " so every push/PR is gated on both. " +
 			"If one is already there, the command isn't one this signal recognizes — " +
 			"file an issue with the step, rather than reshaping CI to match the matcher.",
-	}
+	})
 }
 
 func otherHalf(half string) string {
@@ -111,14 +118,7 @@ func otherHalf(half string) string {
 }
 
 func workflowUsesLintAction(w *workflows.File) bool {
-	for _, j := range w.Jobs {
-		for _, st := range j.Steps {
-			if lintActionRE.MatchString(st.Uses) {
-				return true
-			}
-		}
-	}
-	return false
+	return w.AnyUsesMatches(lintActionRE)
 }
 
 func init() {

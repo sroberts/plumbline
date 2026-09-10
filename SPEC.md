@@ -343,6 +343,7 @@ Signals are derived directly from Table 2 ("Complete Feedback Loop Inventory") o
 | `l4.threshold-block` | A workflow conditional reads from a metrics file and fails based on a threshold (`if: fromJson(...).rate < N`). |
 | `l4.worktree-agents` | Repo contains `.devcontainer/`, agent runner config (`.claude/`, `.github/agents/`), or scripts referencing concurrent worktrees. |
 | `l4.error-recovery` | Workflows use `continue-on-error` + retry steps, or `nick-fields/retry` action. |
+| `l4.measurement-backed` | The **autonomy-without-guardrails** check. If any workflow modifies the repo or its tracker without a human in the path (`create-pull-request`, `git push`, `gh pr merge`, `gh issue create`, automerge actions), a `push`/`pull_request`-triggered workflow must contain something that can fail the change. Scheduled suites don't count — a nightly reports, it doesn't block a merge. `NA` when there's no such automation. |
 
 **Level 5 — Self-Sustaining**
 
@@ -393,6 +394,16 @@ The concrete case (github.com/sroberts/decant, a Go library) scored 0.67 on both
 - Generic threshold flags need a context check. `--fail-below` was matching plumbline's own `plumbline assess --fail-below 3` maturity gate in `canary-repos.yml` and crediting it as a coverage gate.
 - When a signal can only confirm intent rather than execution — a step *named* `Lint` running an unrecognized script — it may still fire, but at low confidence. Reporting nothing is worse; reporting it as certain is dishonest.
 - Detector gaps are bugs against the detector. The `l3.build-lint-gate` fix hint now says so, rather than telling a team to add a step they already run.
+
+#### L4: autonomy without guardrails, graded the same way
+
+`l4.measurement-backed` is the second of the paper's two anti-patterns, modelled identically to the L3 one below: it asks the positive question — is the autonomy in this repo backed by a gate that can stop it? — and returns `Missing` for the anti-pattern, `NA` when there's no repo-modifying automation to grade.
+
+The paper's claim is that levels are sequential: L4 without L3 isn't "most of the way to L4", it's a machine committing to a codebase nothing is checking. This detector asks that question in the form a static scan can answer: does automation that mutates the repo coexist with a `push`/`pull_request` workflow containing something that can fail?
+
+Scheduled workflows are deliberately excluded from counting as guardrails. A nightly suite reports; it does not block a merge. Counting one would pass exactly the repos this signal exists to catch.
+
+**Limits:** a `Found` here means a blocking gate exists in the same repo as the autonomy. It does **not** establish that the gate covers the code path the automation touches, nor that branch protection requires the check to pass — branch protection is repo configuration, not filesystem state, and plumbline does not read it. Both caveats ship in the result's notes rather than living only here. Confidence is capped at medium.
 
 #### L3: the dashboard graveyard is graded as a positive signal, not an inverted one
 
@@ -663,20 +674,21 @@ When the user disagrees with a `Missing` verdict, they need to see what the dete
 ```
 $ plumbline assess --debug
 …
-[debug] l3.coverage-gate: stat codecov.yml                      hit=false
-[debug] l3.coverage-gate: stat .github/workflows/ci.yml         hit=true
-[debug] l3.coverage-gate: regex `--cov-fail-under` in ci.yml    hit=false
-[debug] l3.coverage-gate: regex `go tool cover -func` in ci.yml hit=false
-[debug] l3.coverage-gate: stat .github/workflows/test.yml       hit=true
-[debug] l3.coverage-gate: regex `--cov-fail-under` in test.yml  hit=false
-[debug] l3.coverage-gate: regex `go tool cover -func` in test.yml   hit=true
-[debug] l3.coverage-gate: step `coverage` env/if threshold      hit=false
-[debug] l3.coverage-gate: regex `exit 1` in step `coverage`     hit=false
-[debug] l3.coverage-gate: result = partial (score=0.67, conf=low, method=ast)
+[debug] l3.coverage-gate: stat codecov.yml                              hit=false
+[debug] l3.coverage-gate: stat .codecov.yml                            hit=false
+[debug] l3.coverage-gate: trigger `pull_request` .github/workflows/ci.yml hit=true
+[debug] l3.coverage-gate: threshold flag in a coverage step .github/workflows/ci.yml hit=true (step: Coverage gate)
+[debug] l3.coverage-gate: status=found score=1 confidence=medium method=ast
 …
 ```
 
-Each `DiagEntry` (see §6 `Result` struct) becomes one line. The `--debug` flag is the load-bearing affordance for trust: a user who sees exactly which paths were probed and which patterns ran can either fix their repo or file a precise issue against a signal.
+Each `DiagEntry` (see §6 `Result` struct) becomes one line, followed by the signal's summary line. The `--debug` flag is the load-bearing affordance for trust: a user who sees exactly which paths were probed and which patterns ran can either fix their repo or file a precise issue against a signal.
+
+**Instrumentation is per-signal and currently partial.** Detectors record probes by calling `acmm.NewDiagnostics(ctx)` and wrapping conditions in `d.Probe(path, action, hit, detail...)`; recording is a no-op unless `--debug` put a marker on the context, so the normal scan path pays nothing. Signals that have not been instrumented emit only their summary line — visibly uninstrumented rather than silently so.
+
+Instrumented today: `l3.build-lint-gate`, `l3.coverage-gate`. Adding probes to a signal is a local change and does not alter its verdict; new signals should include them.
+
+The gap this closes is concrete. A Go repo reported both L3 gates scoring 0.67 despite implementing both, and had no way to see which probe failed — the fix hint said "add a lint step" to a workflow with three. `--debug` now answers that in one command.
 
 `--debug` is also captured into the verdict JSON when both `--debug` and `--json` are set: each `signal-result` gains a `diag: [...]` array. This lets LLM agents reason about *why* a signal fired the way it did without re-running the scan.
 

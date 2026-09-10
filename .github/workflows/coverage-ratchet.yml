@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # For the fallback below: when the repo forbids Actions from opening
+  # PRs, the ratchet files an issue instead so the result is still
+  # visible. Without this the loop just dies in a log nobody reads.
+  issues: write
 
 jobs:
   ratchet:
@@ -53,7 +57,15 @@ jobs:
         run: echo '${{ steps.decide.outputs.new_floor }}' > .coverage-floor
 
       - name: open ratchet PR
+        id: pr
         if: steps.decide.outputs.bump == 'true'
+        # Tolerated so the fallback below can run. The step failing is not
+        # the same as the ratchet having nothing to say, and for ten
+        # consecutive weekly runs the difference was invisible: every run
+        # measured coverage, decided a bump, wrote the file, then died
+        # here with "GitHub Actions is not permitted to create or approve
+        # pull requests" and reported nothing anyone saw.
+        continue-on-error: true
         uses: peter-evans/create-pull-request@v7
         with:
           commit-message: |
@@ -76,3 +88,47 @@ jobs:
             PR tightens the gate by 1pp.
           add-paths: |
             .coverage-floor
+
+      # Fallback. Opening a PR from Actions requires the repository
+      # setting "Allow GitHub Actions to create and approve pull
+      # requests" (Settings → Actions → General → Workflow permissions).
+      # The permissions: block above cannot grant it — it is a repo-level
+      # toggle, and while it is off the ratchet cannot land its own
+      # change. Filing an issue keeps the measurement actionable instead
+      # of stranding it in a log.
+      - name: report ratchet result when the PR could not be opened
+        if: steps.decide.outputs.bump == 'true' && steps.pr.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TOTAL: ${{ steps.cov.outputs.total }}
+          OLD_FLOOR: ${{ steps.cov.outputs.floor }}
+          NEW_FLOOR: ${{ steps.decide.outputs.new_floor }}
+        run: |
+          title="chore(ci): ratchet coverage floor ${OLD_FLOOR} → ${NEW_FLOOR}"
+          body=$(cat <<EOF
+          The weekly coverage ratchet wanted to open a PR and could not.
+
+          - Total coverage on main: **${TOTAL}%**
+          - Current floor: **${OLD_FLOOR}%**
+          - Proposed floor: **${NEW_FLOOR}%**
+
+          To apply, edit \`.coverage-floor\` to \`${NEW_FLOOR}\`.
+
+          To let the ratchet do this itself, enable **Settings → Actions →
+          General → Workflow permissions → "Allow GitHub Actions to create
+          and approve pull requests"**. Until then, this issue is the only
+          output the ratchet can produce.
+
+          Opened by [\`coverage-ratchet.yml\`](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}).
+          EOF
+          )
+          # One issue per proposed floor, not one per week.
+          existing=$(gh issue list --state open --search "$title in:title" --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            echo "Issue #${existing} already tracks this bump."
+          else
+            gh issue create --title "$title" --body "$body" --label ci || \
+              gh issue create --title "$title" --body "$body"
+          fi
+          echo "::error::Coverage ratchet could not open a PR: GitHub Actions is not permitted to create pull requests in this repo. Enable it in Settings → Actions → General → Workflow permissions. The proposed floor (${NEW_FLOOR}%) has been filed as an issue."
+          exit 1
