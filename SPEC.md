@@ -627,20 +627,21 @@ When the user disagrees with a `Missing` verdict, they need to see what the dete
 ```
 $ plumbline assess --debug
 …
-[debug] l3.coverage-gate: stat codecov.yml                      hit=false
-[debug] l3.coverage-gate: stat .github/workflows/ci.yml         hit=true
-[debug] l3.coverage-gate: regex `--cov-fail-under` in ci.yml    hit=false
-[debug] l3.coverage-gate: regex `go tool cover -func` in ci.yml hit=false
-[debug] l3.coverage-gate: stat .github/workflows/test.yml       hit=true
-[debug] l3.coverage-gate: regex `--cov-fail-under` in test.yml  hit=false
-[debug] l3.coverage-gate: regex `go tool cover -func` in test.yml   hit=true
-[debug] l3.coverage-gate: step `coverage` env/if threshold      hit=false
-[debug] l3.coverage-gate: regex `exit 1` in step `coverage`     hit=false
-[debug] l3.coverage-gate: result = partial (score=0.67, conf=low, method=ast)
+[debug] l3.coverage-gate: stat codecov.yml                              hit=false
+[debug] l3.coverage-gate: stat .codecov.yml                            hit=false
+[debug] l3.coverage-gate: trigger `pull_request` .github/workflows/ci.yml hit=true
+[debug] l3.coverage-gate: threshold flag in a coverage step .github/workflows/ci.yml hit=true (step: Coverage gate)
+[debug] l3.coverage-gate: status=found score=1 confidence=medium method=ast
 …
 ```
 
-Each `DiagEntry` (see §6 `Result` struct) becomes one line. The `--debug` flag is the load-bearing affordance for trust: a user who sees exactly which paths were probed and which patterns ran can either fix their repo or file a precise issue against a signal.
+Each `DiagEntry` (see §6 `Result` struct) becomes one line, followed by the signal's summary line. The `--debug` flag is the load-bearing affordance for trust: a user who sees exactly which paths were probed and which patterns ran can either fix their repo or file a precise issue against a signal.
+
+**Instrumentation is per-signal and currently partial.** Detectors record probes by calling `acmm.NewDiagnostics(ctx)` and wrapping conditions in `d.Probe(path, action, hit, detail...)`; recording is a no-op unless `--debug` put a marker on the context, so the normal scan path pays nothing. Signals that have not been instrumented emit only their summary line — visibly uninstrumented rather than silently so.
+
+Instrumented today: `l3.build-lint-gate`, `l3.coverage-gate`. Adding probes to a signal is a local change and does not alter its verdict; new signals should include them.
+
+The gap this closes is concrete. A Go repo reported both L3 gates scoring 0.67 despite implementing both, and had no way to see which probe failed — the fix hint said "add a lint step" to a workflow with three. `--debug` now answers that in one command.
 
 `--debug` is also captured into the verdict JSON when both `--debug` and `--json` are set: each `signal-result` gains a `diag: [...]` array. This lets LLM agents reason about *why* a signal fired the way it did without re-running the scan.
 

@@ -7,6 +7,8 @@
 // versioning and §9.5 schema contract tests).
 package acmm
 
+import "context"
+
 // Level is an ACMM maturity level (1–5). Level 1 is the implicit floor
 // — every repo has it. Levels 2–5 each correspond to a feedback-loop
 // topology described in the source paper.
@@ -233,4 +235,72 @@ type FixPlan struct {
 	SignalID string  `json:"signal_id"`
 	Summary  string  `json:"summary"`
 	Ops      []FixOp `json:"ops"`
+}
+
+// ===== detection diagnostics =====
+
+type diagKey struct{}
+
+// WithDiagnostics marks a context as wanting probe-level detection
+// diagnostics. Detectors check this via NewDiagnostics; when it is
+// absent, probe recording compiles down to a boolean pass-through and
+// costs nothing on the normal scan path.
+func WithDiagnostics(ctx context.Context) context.Context {
+	return context.WithValue(ctx, diagKey{}, true)
+}
+
+// DiagEnabled reports whether ctx was marked by WithDiagnostics.
+func DiagEnabled(ctx context.Context) bool {
+	on, _ := ctx.Value(diagKey{}).(bool)
+	return on
+}
+
+// Diagnostics accumulates DiagEntry values during one signal's Detect.
+//
+// SPEC.md §8.2.7 calls --debug "the load-bearing affordance for trust":
+// a user who can see which paths were probed and which patterns ran can
+// file a precise issue against a signal instead of reshaping their repo
+// to guess at a matcher. That only holds if detectors actually record
+// their probes, so this is the API for doing it.
+type Diagnostics struct {
+	enabled bool
+	entries []DiagEntry
+}
+
+// NewDiagnostics returns a recorder that is live only when ctx was
+// marked by WithDiagnostics. The nil-ish disabled form is safe to use
+// unconditionally — every method works, nothing is retained.
+func NewDiagnostics(ctx context.Context) *Diagnostics {
+	return &Diagnostics{enabled: DiagEnabled(ctx)}
+}
+
+// Probe records one detection probe and returns hit unchanged, so it can
+// wrap a condition inline:
+//
+//	if d.Probe(w.Path, "regex `go tool cover -func`", found) { ... }
+func (d *Diagnostics) Probe(path, action string, hit bool, detail ...string) bool {
+	if d == nil || !d.enabled {
+		return hit
+	}
+	e := DiagEntry{Path: path, Action: action, Hit: hit}
+	if len(detail) > 0 {
+		e.Detail = detail[0]
+	}
+	d.entries = append(d.entries, e)
+	return hit
+}
+
+// Attach copies the recorded probes onto a Result, along with a final
+// entry naming the outcome. Returns the Result so it can be used in a
+// return statement.
+func (d *Diagnostics) Attach(r Result) Result {
+	if d == nil || !d.enabled {
+		return r
+	}
+	r.Diag = append(d.entries, DiagEntry{
+		Action: "result",
+		Hit:    r.Status == StatusFound,
+		Detail: string(r.Status),
+	})
+	return r
 }
