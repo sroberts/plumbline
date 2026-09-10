@@ -47,7 +47,10 @@ func (s BuildLintGate) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Re
 		}
 		hasLint := w.AnyRunMatches(lintRunRE) || workflowUsesLintAction(w)
 		byNameOnly := false
-		if !hasLint && w.AnyStepNameMatches(lintNameRE) {
+		// A job that delegates to a reusable workflow has no steps to
+		// walk, so its path is the only evidence of what it does:
+		// `jobs.lint.uses: org/.github/.github/workflows/lint.yml@main`.
+		if !hasLint && (w.AnyStepNameMatches(lintNameRE) || w.AnyUsesMatches(lintNameRE)) {
 			hasLint, byNameOnly = true, true
 		}
 		hasBuild := w.AnyRunMatches(buildRunRE)
@@ -111,14 +114,7 @@ func otherHalf(half string) string {
 }
 
 func workflowUsesLintAction(w *workflows.File) bool {
-	for _, j := range w.Jobs {
-		for _, st := range j.Steps {
-			if lintActionRE.MatchString(st.Uses) {
-				return true
-			}
-		}
-	}
-	return false
+	return w.AnyUsesMatches(lintActionRE)
 }
 
 func init() {

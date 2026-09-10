@@ -462,3 +462,26 @@ jobs:
 		t.Errorf("status = %v, want missing — gofmt's exit 1 acts on no metric", got.Status)
 	}
 }
+
+// Splitting lint into a shared org workflow is a normal layout, and the
+// calling job has no steps for the detector to read — only a path.
+func TestBuildLintGateSeesReusableLintWorkflow(t *testing.T) {
+	files := fstest.MapFS{".github/workflows/ci.yml": {Data: []byte(`
+name: CI
+on: [pull_request]
+jobs:
+  lint:
+    uses: acme/.github/.github/workflows/golangci-lint.yml@main
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: go build ./...
+`)}}
+	got := runOn(t, BuildLintGate{}, files)
+	if got.Score != acmm.ScoreFound {
+		t.Errorf("score = %v, want %v (notes: %v)", got.Score, acmm.ScoreFound, got.Notes)
+	}
+	if got.Confidence != acmm.ConfidenceMedium {
+		t.Errorf("confidence = %v, want medium — golangci-lint in the path is a real match, not a name guess", got.Confidence)
+	}
+}
