@@ -67,7 +67,7 @@ plumbline [global flags] <command> [args]
 | `plumbline help [topic]` | Long-form help on a topic (`signals`, `scoring`, `levels`, `output`, `config`, `ci`, `agents`, `profiles`). Output is plain markdown so an LLM agent can ingest it directly. | no |
 | `plumbline version` | Print build version + commit. Supports `--json`. | no |
 
-`fix`, `install-skill`, and `install-ci` are the only commands that write inside a target repo (§11). All three are dry-run by default and all three refuse to overwrite an existing file. `badge` also writes, but only its own generated artifact at a path the user names.
+`fix`, `install-skill`, and `install-ci` are the only commands that write inside a target repo (§11). All three are dry-run by default and all three refuse to overwrite an existing file. `badge` also writes, and has to overwrite — regenerating in place is the whole workflow — so it draws the line differently: every badge carries a generated-file marker comment, and `badge` refuses any `--out` target that exists without one. `--out README.md` is a typo, not an instruction.
 
 ### Scaffolding scope
 
@@ -810,6 +810,13 @@ one-liner:
     git diff --exit-code -- .plumbline-badge.svg \
       || { echo "::error::badge is stale — run 'plumbline badge' and commit"; exit 1; }
 ```
+
+The generated workflow pins `--label` explicitly rather than relying on
+the CLI default. A badge committed under one label and regenerated under
+another differs on every byte, so the drift gate would fail forever with
+an error message that sends the user in a circle; `install-ci
+--badge-label` and `plumbline badge --label` have to agree, and pinning
+the value in the workflow is what makes that checkable.
 
 `--from` renders from an artifact `snapshot` already wrote rather than
 rescanning, so a workflow that produces both cannot emit a badge and a

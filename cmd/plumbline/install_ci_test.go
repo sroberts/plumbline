@@ -132,14 +132,35 @@ func TestInstallCI_RejectsBadInput(t *testing.T) {
 // draws around this command. plumbline writing a workflow that plumbline
 // then credits is the circularity the scaffolding-scope rule exists to
 // prevent, so the one thing installing it must never do is move the
-// repo's own verdict. It is detected as a real artifact (the gate does
-// run and does block), but partial credit on one L3 signal must not be
-// enough to climb a level on its own.
+// repo's own verdict.
+//
+// The fixture has to be an L2 repo, and that is the whole point of it.
+// An L1 repo cannot move no matter what an L3 signal does — levels are
+// sequential, so unmet L2 pins the verdict at 1 and the assertion holds
+// for a reason that has nothing to do with the behavior under test. The
+// test asserted exactly that vacuous thing until code review caught it.
+// From L2, partial credit on an L3 signal is genuinely the kind of thing
+// that could push a verdict, so the assertion has teeth.
+//
+// Both halves matter: the signal must actually flip (or the workflow
+// isn't being detected at all, and the test would pass for the wrong
+// reason again), and the verdict must not.
 func TestInstallCI_CannotBootstrapALevel(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "README.md", "# r\n")
+	writeFile(t, dir, "CLAUDE.md", "# CLAUDE.md\n\n"+strings.Repeat("guidance line\n", 60))
+	writeFile(t, dir, "CONTRIBUTING.md", "# Contributing\n\n"+strings.Repeat("how we work\n", 40))
+	writeFile(t, dir, ".github/pull_request_template.md",
+		"## Checklist\n\n- [ ] tests\n- [ ] docs\n- [ ] changelog\n")
+	writeFile(t, dir, ".gitmessage", "subject\n\n# Conventional commits: feat|fix|docs\n")
 
 	_, before, _ := runCLI(t, "assess", "--report", "json", dir)
+	if lvl := levelOf(t, before); lvl != 2 {
+		t.Fatalf("fixture must start at L2 for this test to mean anything, got L%d", lvl)
+	}
+	if got := signalStatus(t, before, "l3.build-lint-gate"); got != "missing" {
+		t.Fatalf("fixture should start with no build/lint gate, got %q", got)
+	}
 
 	if code, _, errOut := runCLI(t, "install-ci", "--apply", "--fail-below", "3", dir); code != exitOK {
 		t.Fatalf("install-ci exit = %d (%s)", code, errOut)
@@ -147,11 +168,36 @@ func TestInstallCI_CannotBootstrapALevel(t *testing.T) {
 
 	_, after, _ := runCLI(t, "assess", "--report", "json", dir)
 
-	if levelOf(t, before) != levelOf(t, after) {
-		t.Errorf("installing plumbline's own workflow moved the verdict from L%d to L%d; "+
-			"a tool must not be able to raise a repo's score by writing a file it then credits",
-			levelOf(t, before), levelOf(t, after))
+	if got := signalStatus(t, after, "l3.build-lint-gate"); got != "partial" {
+		t.Errorf("l3.build-lint-gate = %q after installing the workflow, want partial; "+
+			"if the workflow is no longer detected at all, this test passes for the wrong reason", got)
 	}
+	if lvl := levelOf(t, after); lvl != 2 {
+		t.Errorf("installing plumbline's own workflow moved the verdict from L2 to L%d; "+
+			"a tool must not be able to raise a repo's score by writing a file it then credits", lvl)
+	}
+}
+
+// signalStatus pulls one signal's status out of an assess --report json
+// payload.
+func signalStatus(t *testing.T, jsonReport, id string) string {
+	t.Helper()
+	var doc struct {
+		Signals []struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		} `json:"signals"`
+	}
+	if err := json.Unmarshal([]byte(jsonReport), &doc); err != nil {
+		t.Fatalf("parse report: %v", err)
+	}
+	for _, sig := range doc.Signals {
+		if sig.ID == id {
+			return sig.Status
+		}
+	}
+	t.Fatalf("signal %q not present in report", id)
+	return ""
 }
 
 // levelOf pulls verdict.level out of an assess --report json payload.

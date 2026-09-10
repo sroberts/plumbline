@@ -48,8 +48,10 @@ func TestBadge_OutDashStreamsToStdout(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("exit = %d (stderr: %s)", code, errOut)
 	}
-	if !strings.HasPrefix(strings.TrimSpace(out), "<svg") {
-		t.Errorf("expected SVG on stdout, got:\n%s", out)
+	// The document opens with the generated-file marker comment, so
+	// check for the root element rather than a literal prefix.
+	if !strings.Contains(out, "<svg ") || !strings.Contains(out, "</svg>") {
+		t.Errorf("expected an SVG document on stdout, got:\n%s", out)
 	}
 	if _, err := os.Stat(filepath.Join(dir, defaultBadgeName)); !os.IsNotExist(err) {
 		t.Errorf("--out - must not write a file")
@@ -139,6 +141,35 @@ func TestBadge_BadPath(t *testing.T) {
 	code, _, errOut := runCLI(t, "badge", filepath.Join(t.TempDir(), "does-not-exist"))
 	if code != exitCannotRun {
 		t.Fatalf("exit = %d, want %d (stderr: %s)", code, exitCannotRun, errOut)
+	}
+}
+
+// TestBadge_RefusesToClobberAForeignFile — `--out` is a path the user
+// types, and a typo of an existing file should not silently destroy it.
+// Regenerating a badge in place must still work, since that is the whole
+// point of the drift-gate workflow.
+func TestBadge_RefusesToClobberAForeignFile(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "README.md", "# precious\n")
+
+	target := filepath.Join(dir, "README.md")
+	code, _, errOut := runCLI(t, "badge", "--out", target, dir)
+	if code != exitCannotRun {
+		t.Fatalf("exit = %d, want %d (stderr: %s)", code, exitCannotRun, errOut)
+	}
+	body, _ := os.ReadFile(target)
+	if string(body) != "# precious\n" {
+		t.Fatalf("the file was modified anyway: %q", body)
+	}
+
+	// Regenerating over a badge plumbline wrote is fine.
+	badgePath := filepath.Join(dir, "b.svg")
+	if code, _, errOut := runCLI(t, "badge", "--out", badgePath, dir); code != exitOK {
+		t.Fatalf("first write exit = %d (%s)", code, errOut)
+	}
+	if code, _, errOut := runCLI(t, "badge", "--out", badgePath, dir); code != exitOK {
+		t.Errorf("regenerating over its own badge exit = %d (%s); "+
+			"the drift-gate workflow depends on this working", code, errOut)
 	}
 }
 

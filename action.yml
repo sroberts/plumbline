@@ -114,6 +114,13 @@ runs:
         PL_PATH: ${{ inputs.path }}
       run: |
         set -euo pipefail
+        # jq ships on GitHub-hosted runners but not necessarily on a
+        # self-hosted one or inside a container job. Say so plainly
+        # rather than failing with "jq: command not found".
+        if ! command -v jq >/dev/null 2>&1; then
+          echo "::error::this action needs 'jq' to read plumbline's JSON output; install it on the runner, or call the plumbline CLI directly (see 'plumbline help ci')"
+          exit 1
+        fi
         plumbline assess --json --quiet "$PL_PATH" > "${RUNNER_TEMP}/plumbline.json"
         level=$(jq -r '.verdict.level' "${RUNNER_TEMP}/plumbline.json")
         name=$(jq -r '.verdict.name' "${RUNNER_TEMP}/plumbline.json")
@@ -142,6 +149,13 @@ runs:
         set -euo pipefail
         plumbline badge --label "$PL_BADGE_LABEL" --out "$PL_BADGE" "$PL_PATH"
 
+    - name: Job summary
+      if: inputs.summary == 'true'
+      shell: bash
+      env:
+        PL_PATH: ${{ inputs.path }}
+      run: plumbline assess --report markdown --out - --quiet "$PL_PATH" >> "$GITHUB_STEP_SUMMARY"
+
     - name: Badge drift gate
       if: inputs.badge != '' && inputs.badge-drift-check == 'true'
       shell: bash
@@ -165,16 +179,10 @@ runs:
           exit 1
         fi
 
-    - name: Job summary
-      if: inputs.summary == 'true'
-      shell: bash
-      env:
-        PL_PATH: ${{ inputs.path }}
-      run: plumbline assess --report markdown --out - --quiet "$PL_PATH" >> "$GITHUB_STEP_SUMMARY"
-
-    # The gate runs last on purpose: a failing gate should not prevent
-    # the badge, snapshot, and summary above from being produced. The
-    # author needs those most on exactly the run that fails.
+    # Both gates run last on purpose. Composite steps stop at the first
+    # failure, so anything placed after a gate is lost on exactly the run
+    # where the author most needs it — hence badge, snapshot, and job
+    # summary all come first, and the two failing checks come after.
     - name: ACMM gate
       if: inputs.fail-below != '0' && inputs.fail-below != ''
       shell: bash

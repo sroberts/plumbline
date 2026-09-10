@@ -269,6 +269,13 @@ That installs .github/workflows/plumbline.yml. Three variants:
 
 The TUI has the same picker: press [w] on the results screen.
 
+If you customize the badge label, pass it to both commands — the
+workflow regenerates the badge before diffing it, so a mismatch fails
+the gate on every run:
+
+  plumbline badge --label "AI readiness"
+  plumbline install-ci --badge-label "AI readiness" --apply
+
 ## The status badge
 
 'plumbline badge' renders a self-contained SVG you commit and reference

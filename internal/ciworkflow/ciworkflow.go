@@ -40,6 +40,9 @@ const DefaultPath = ".github/workflows/plumbline.yml"
 // DefaultBadgePath mirrors `plumbline badge`'s own default output.
 const DefaultBadgePath = ".plumbline-badge.svg"
 
+// DefaultBadgeLabel mirrors `plumbline badge`'s own default label.
+const DefaultBadgeLabel = "ACMM"
+
 // Variant is one installable workflow shape.
 type Variant struct {
 	// ID is the stable CLI-visible identifier.
@@ -107,6 +110,13 @@ type Options struct {
 	// DefaultBadgePath.
 	BadgePath string
 
+	// BadgeLabel is the badge's left-hand text. It is pinned into the
+	// generated workflow rather than left to the CLI default: a badge
+	// committed under one label and regenerated under another differs
+	// on every byte, so the drift gate would fail forever with an error
+	// message that sends the user in a circle.
+	BadgeLabel string
+
 	// Path is where the workflow file is installed. Empty means
 	// DefaultPath. Used by NewPlan, ignored by Render.
 	Path string
@@ -124,6 +134,13 @@ func (o Options) badgePath() string {
 		return DefaultBadgePath
 	}
 	return o.BadgePath
+}
+
+func (o Options) badgeLabel() string {
+	if o.BadgeLabel == "" {
+		return DefaultBadgeLabel
+	}
+	return o.BadgeLabel
 }
 
 func (o Options) path() string {
@@ -152,6 +169,9 @@ func (o Options) validate() error {
 	}
 	if filepath.IsAbs(bp) {
 		return fmt.Errorf("--badge %q: must be relative to the repo root", bp)
+	}
+	if strings.ContainsAny(o.badgeLabel(), "\n\r") {
+		return fmt.Errorf("--badge-label %q: may not contain newlines", o.badgeLabel())
 	}
 	return nil
 }
@@ -230,7 +250,8 @@ func Render(opts Options) (string, error) {
 		b.WriteString("        # and commit the result.\n")
 		b.WriteString("        run: |\n")
 		fmt.Fprintf(&b, "          badge=%s\n", shellSingleQuote(opts.badgePath()))
-		b.WriteString("          plumbline badge --out \"$badge\" .\n")
+		fmt.Fprintf(&b, "          label=%s\n", shellSingleQuote(opts.badgeLabel()))
+		b.WriteString("          plumbline badge --label \"$label\" --out \"$badge\" .\n")
 		b.WriteString("          # `git diff` only compares tracked files, so a badge that\n")
 		b.WriteString("          # was generated but never committed would sail through the\n")
 		b.WriteString("          # gate below and leave it green forever — a gate that\n")
@@ -274,11 +295,17 @@ func NewPlan(opts Options) (acmm.FixPlan, error) {
 	// Only claim a gate floor the rendered workflow actually enforces:
 	// the badge variant has no gate step, so --fail-below is inert there
 	// and saying otherwise would make the preview lie.
-	if opts.wantsGate() {
+	switch {
+	case opts.wantsGate():
 		summary += fmt.Sprintf(" Gate floor: L%d.", opts.FailBelow)
-	} else if opts.FailBelow > 0 {
+	case opts.FailBelow > 0:
 		summary += fmt.Sprintf(" Note: --fail-below %d is ignored by the %q variant, which installs no gate step.",
 			opts.FailBelow, v.ID)
+	case v.ID != VariantBadge:
+		// A gate-capable variant with no floor renders no gate step, so
+		// the variant description above overstates what gets written.
+		summary += " No gate floor set: the workflow measures without enforcing." +
+			" Pass --fail-below N to add the gate."
 	}
 
 	return acmm.FixPlan{

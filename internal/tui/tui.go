@@ -400,10 +400,14 @@ func (m *model) updateFixPreview(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		plan := m.fixPlan
 		m.fixer = nil
 		m.fixPlan = acmm.FixPlan{}
+		// Route on the plan alone. An earlier version also tested
+		// m.skillGlobal, but that flag survives an esc out of the skill
+		// picker, so a later signal-fix preview would cancel to the
+		// skill picker instead of the signal it came from.
 		switch {
 		case isCIPlan(plan):
 			m.screen = screenCIVariants
-		case m.skillGlobal || isSkillPlan(plan):
+		case isSkillPlan(plan):
 			m.screen = screenSkillTargets
 		default:
 			m.screen = screenDetail

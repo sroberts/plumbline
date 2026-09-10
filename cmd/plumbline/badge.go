@@ -188,6 +188,15 @@ func writeBadge(svg []byte, outPath string, stdout, stderr io.Writer, v acmm.Ver
 		}
 		return nil
 	}
+	// Every other writer in the tool goes through internal/fix, which
+	// refuses to clobber. badge has to overwrite — regenerating in place
+	// is the whole workflow — so it draws the line at files it did not
+	// write: `--out README.md` is a typo, not an instruction.
+	if existing, err := os.ReadFile(outPath); err == nil && !badge.IsGenerated(existing) {
+		return errCannotRun(fmt.Errorf(
+			"refusing to overwrite %s: it is not a plumbline-generated badge (remove it first if you meant to replace it)",
+			outPath))
+	}
 	if err := os.WriteFile(outPath, svg, 0o644); err != nil {
 		return errCannotRun(err)
 	}

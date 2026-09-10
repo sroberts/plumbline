@@ -14,12 +14,13 @@ import (
 
 func newInstallCICmd(stdout, stderr io.Writer) *cobra.Command {
 	var (
-		apply     bool
-		variant   string
-		failBelow int
-		badgePath string
-		outPath   string
-		list      bool
+		apply      bool
+		variant    string
+		failBelow  int
+		badgePath  string
+		badgeLabel string
+		outPath    string
+		list       bool
 	)
 
 	cmd := &cobra.Command{
@@ -45,6 +46,10 @@ can simply regenerate it and fail on a diff — the same drift-gate shape
 plumbline uses for its own .plumbline.toon. A stale badge then shows up
 as a reviewable change in the PR that caused it, rather than a claim
 about the repo that quietly stopped being true.
+
+If you customize the badge with --badge-label, pass the same value here:
+the workflow regenerates the badge before diffing it, so a label mismatch
+fails the gate on every run.
 
 --fail-below sets the gate floor (2-5). Omit it (or pass 0) to install
 the measurement without the enforcement — worth doing first in a repo
@@ -100,10 +105,11 @@ See also:
 			}
 
 			plan, err := ciworkflow.NewPlan(ciworkflow.Options{
-				Variant:   variant,
-				FailBelow: failBelow,
-				BadgePath: badgePath,
-				Path:      outPath,
+				Variant:    variant,
+				FailBelow:  failBelow,
+				BadgePath:  badgePath,
+				BadgeLabel: badgeLabel,
+				Path:       outPath,
 			})
 			if err != nil {
 				return errCannotRun(err)
@@ -121,13 +127,17 @@ See also:
 			// drift. Say so at install time.
 			if apply && wantsBadge(variant) {
 				b := badgeOrDefault(badgePath)
+				l := badgeLabel
+				if l == "" {
+					l = ciworkflow.DefaultBadgeLabel
+				}
 				fmt.Fprintf(stderr,
 					"Next: generate the badge and commit it, or the workflow's drift gate fails:\n"+
-						"  plumbline badge --out %s .\n"+
+						"  plumbline badge --label %q --out %s .\n"+
 						"  git add %s\n"+
 						"  # then reference it from README.md:\n"+
-						"  ![ACMM level](%s)\n",
-					b, b, b)
+						"  ![%s level](%s)\n",
+					l, b, b, l, b)
 			}
 			return nil
 		},
@@ -139,6 +149,8 @@ See also:
 		fmt.Sprintf("Workflow shape. One of: %s.", strings.Join(ciworkflow.IDs(), ", ")))
 	f.IntVar(&failBelow, "fail-below", 0, "Gate floor for the workflow: fail the build below level N (2-5). 0 = install with no gate.")
 	f.StringVar(&badgePath, "badge", ciworkflow.DefaultBadgePath, "Committed badge path the badge variants keep current.")
+	f.StringVar(&badgeLabel, "badge-label", ciworkflow.DefaultBadgeLabel,
+		"Badge label the workflow regenerates with. Must match the label the committed badge was built with, or the drift gate never passes.")
 	f.StringVar(&outPath, "out", ciworkflow.DefaultPath, "Workflow path to write, relative to the repo root.")
 	f.BoolVar(&list, "list", false, "List available workflow variants and exit.")
 	return cmd

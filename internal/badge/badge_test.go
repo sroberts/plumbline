@@ -121,6 +121,21 @@ func TestSVG_HasAccessibleName(t *testing.T) {
 	}
 }
 
+// TestSVG_CarriesGeneratedMarker backs the CLI's refusal to overwrite a
+// file it did not write: without a marker, `--out README.md` would be
+// indistinguishable from regenerating a badge.
+func TestSVG_CarriesGeneratedMarker(t *testing.T) {
+	out := SVG(verdict(acmm.LevelMeasured), Options{})
+	if !IsGenerated(out) {
+		t.Errorf("badge is not recognized as plumbline-generated:\n%s", out)
+	}
+	for _, notABadge := range []string{"# README\n", "<svg><rect/></svg>", ""} {
+		if IsGenerated([]byte(notABadge)) {
+			t.Errorf("IsGenerated said yes to %q", notABadge)
+		}
+	}
+}
+
 // TestMessage_Format pins the message shown on the badge.
 func TestMessage_Format(t *testing.T) {
 	if got := Message(verdict(acmm.LevelInstructed)); got != "L2 Instructed" {
