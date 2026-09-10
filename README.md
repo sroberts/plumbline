@@ -178,7 +178,7 @@ A drifted badge then shows up as a reviewable change in the PR that caused it, r
 plumbline ships an [`action.yml`](action.yml), so a consumer repo can skip the install steps:
 
 ```yaml
-- uses: sroberts/plumbline@v0.3.0
+- uses: sroberts/plumbline@v0.3.1
   with:
     fail-below: '3'
     badge: .plumbline-badge.svg
