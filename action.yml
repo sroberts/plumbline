@@ -9,9 +9,7 @@
 # that installs the CLI directly. Both are supported; this action is the
 # shorter form for repos already comfortable pinning a third-party action.
 name: Plumbline ACMM assessment
-description: >-
-  Assess a repository's AI Codebase Maturity Model level, optionally gate
-  the build on it, and keep a committed README status badge current.
+description: "Assess a repo's AI Codebase Maturity Model (ACMM) level, gate CI on it, and keep a README status badge current."
 author: sroberts
 
 branding:
