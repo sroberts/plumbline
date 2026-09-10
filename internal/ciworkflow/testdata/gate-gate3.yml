@@ -1,0 +1,32 @@
+# Managed by `plumbline install-ci`. Safe to edit by hand.
+#
+# plumbline assesses this repo against the AI Codebase Maturity Model
+# (ACMM) — which feedback loops exist on disk. Docs: plumbline help ci
+name: ACMM maturity
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  plumbline:
+    name: ACMM assessment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: install plumbline
+        run: go install github.com/sroberts/plumbline/cmd/plumbline@latest
+
+      - name: ACMM gate
+        # Exit 1 when the repo assesses below the floor. Raise the
+        # floor as loops land; never lower it to make a build pass.
+        run: plumbline assess --fail-below 3 --quiet .

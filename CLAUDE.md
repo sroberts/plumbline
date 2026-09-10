@@ -76,6 +76,12 @@ make lint       # gofmt + go vet (golangci-lint if installed)
 - `.plumbline-badge.svg` — the committed status badge the README links.
   Regenerate with `plumbline badge`; `.github/workflows/maturity.yml`
   fails if the committed copy is stale *or untracked*.
+- `internal/ciworkflow/testdata/*.yml` — golden copies of the workflow
+  `plumbline install-ci` scaffolds. Regenerate with
+  `go test ./internal/ciworkflow -update`, then *read the diff*: it is
+  what a consumer repo's CI will start doing. This is the one artifact
+  plumbline writes and never reads back, so review is the only feedback
+  loop it has.
 - `.coverage-floor` — a one-way ratchet (currently 60). CI enforces it;
   `coverage-ratchet.yml` raises it 1pp when coverage runs 3pp clear. Never
   lower it to make a build pass.
