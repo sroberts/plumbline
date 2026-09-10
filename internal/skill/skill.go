@@ -294,7 +294,29 @@ interface; an interactive Bubble Tea TUI is also available on terminals.
    guarded with a CI drift gate. ` + "`diff`" + ` computes a PR delta against that
    committed base without re-assessing both sides.
 
-5. **Discover the catalog.**
+5. **Wire it into CI, and badge the result.**
+
+   ` + "```" + `
+   plumbline install-ci --fail-below 3        # dry-run
+   plumbline install-ci --fail-below 3 --apply
+   plumbline badge                            # writes .plumbline-badge.svg
+   ` + "```" + `
+
+   ` + "`install-ci`" + ` writes ` + "`.github/workflows/plumbline.yml`" + `
+   (` + "`--variant full|gate|badge`" + `). ` + "`badge`" + ` renders a
+   self-contained SVG the README references with a relative path:
+   ` + "`![ACMM level](.plumbline-badge.svg)`" + `. Both outputs are
+   byte-stable for an unchanged verdict, so CI can regenerate and fail on
+   a diff.
+
+   **This is the only workflow plumbline generates** — the one that runs
+   plumbline. Do not expect it to scaffold a coverage gate, nightly
+   suite, or triage automation; those remain advisory via ` + "`fix_hint`" + `.
+   It scores ` + "`partial`" + ` on ` + "`l3.build-lint-gate`" + `, which is
+   plumbline crediting its own file — never tell a user that installing
+   it means their repo gates its own build.
+
+6. **Discover the catalog.**
 
    ` + "```" + `
    plumbline signals --json
@@ -315,8 +337,10 @@ interface; an interactive Bubble Tea TUI is also available on terminals.
 - **Exit codes**: 0 ok, 1 gate-failed (` + "`--fail-below`" + `), 2 cannot-run, 3 config-error.
 - **Report formats**: ` + "`--report toon|json|yaml|markdown|sarif`" + `. TOON is the
   default CLI output; ` + "`--json`" + ` is shorthand for ` + "`--report json`" + `.
-- **Read-only by default.** Only ` + "`plumbline fix --apply`" + ` and
-  ` + "`plumbline install-skill --apply`" + ` write inside the target repo.
+- **Read-only by default.** Only ` + "`plumbline fix --apply`" + `,
+  ` + "`plumbline install-skill --apply`" + `, and
+  ` + "`plumbline install-ci --apply`" + ` write inside the target repo.
+  ` + "`plumbline badge`" + ` writes only its own SVG, at a path you name.
 
 ## Notes for agents
 
@@ -337,6 +361,9 @@ interface; an interactive Bubble Tea TUI is also available on terminals.
   ` + "`--include-signal`" + `, or ` + "`--exclude-signal`" + ` (all repeatable).
 - Workflow signals (L3+) parse GitHub Actions YAML only in MVP; other
   CI systems are deferred behind ` + "`--ci-system`" + `.
+- ` + "`plumbline install-ci --list`" + ` shows the workflow variants; the
+  TUI has the same picker under ` + "`[w]`" + `, and ` + "`[i]`" + ` for the
+  skill installer.
 - ` + "`plumbline install-skill --list`" + ` shows the eight supported agent tools
   (claude, cursor, codex, gemini, opencode, windsurf, cline, copilot);
   ` + "`--global`" + ` installs at user scope where the tool documents one.

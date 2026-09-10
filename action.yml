@@ -1,0 +1,192 @@
+# Composite action: run plumbline's ACMM assessment in any repo.
+#
+#   - uses: sroberts/plumbline@v1
+#     with:
+#       fail-below: '3'
+#       badge: .plumbline-badge.svg
+#
+# `plumbline install-ci` generates a self-contained workflow instead, one
+# that installs the CLI directly. Both are supported; this action is the
+# shorter form for repos already comfortable pinning a third-party action.
+name: Plumbline ACMM assessment
+description: >-
+  Assess a repository's AI Codebase Maturity Model level, optionally gate
+  the build on it, and keep a committed README status badge current.
+author: sroberts
+
+branding:
+  icon: check-square
+  color: blue
+
+inputs:
+  path:
+    description: Repository path to assess, relative to the workspace.
+    required: false
+    default: '.'
+  version:
+    description: >-
+      plumbline version to install — a Go module version such as v0.2.0,
+      or "latest". Pin it in a repo that wants reproducible verdicts:
+      a tool upgrade can legitimately move the level. The special value
+      "source" builds from ./cmd/plumbline in the checked-out workspace,
+      which only makes sense in the plumbline repo itself.
+    required: false
+    default: latest
+  go-version:
+    description: Go toolchain used to install plumbline.
+    required: false
+    default: stable
+  fail-below:
+    description: >-
+      Fail the build when the assessed level is below N (2-5). "0"
+      installs the measurement without the enforcement.
+    required: false
+    default: '0'
+  badge:
+    description: >-
+      Path to write the SVG status badge, relative to the repo. Empty
+      writes no badge.
+    required: false
+    default: ''
+  badge-label:
+    description: Left-hand text on the badge.
+    required: false
+    default: ACMM
+  badge-drift-check:
+    description: >-
+      When a badge path is set, fail if the regenerated badge differs
+      from the committed one. This is what keeps the README honest.
+    required: false
+    default: 'true'
+  snapshot:
+    description: >-
+      Path to write a maturity-state artifact (.toon/.json/.yaml by
+      extension). Empty writes none.
+    required: false
+    default: ''
+  summary:
+    description: Write a markdown report to the job summary.
+    required: false
+    default: 'true'
+
+outputs:
+  level:
+    description: Assessed ACMM level, 1-5.
+    value: ${{ steps.assess.outputs.level }}
+  level-name:
+    description: Human-readable level name, e.g. "Measured".
+    value: ${{ steps.assess.outputs.level-name }}
+  next-gap:
+    description: Space-separated signal IDs that would unlock the next level.
+    value: ${{ steps.assess.outputs.next-gap }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v5
+      with:
+        go-version: ${{ inputs.go-version }}
+
+    - name: Install plumbline
+      shell: bash
+      env:
+        # Inputs go through the environment rather than being spliced
+        # into the script body: `${{ }}` interpolation happens before
+        # bash sees the line, so a value containing a quote or a `;`
+        # would rewrite the command rather than be an argument to it.
+        PL_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        if [ "$PL_VERSION" = "source" ]; then
+          # Self-hosting: plumbline's own repo assesses itself with the
+          # binary from the commit under test, not the last release —
+          # otherwise the badge drift gate would compare a badge built
+          # here against one generated locally by a different build.
+          go install ./cmd/plumbline
+        else
+          go install "github.com/sroberts/plumbline/cmd/plumbline@${PL_VERSION}"
+        fi
+
+    - name: Assess
+      id: assess
+      shell: bash
+      env:
+        PL_PATH: ${{ inputs.path }}
+      run: |
+        set -euo pipefail
+        # jq ships on GitHub-hosted runners but not necessarily on a
+        # self-hosted one or inside a container job. Say so plainly
+        # rather than failing with "jq: command not found".
+        if ! command -v jq >/dev/null 2>&1; then
+          echo "::error::this action needs 'jq' to read plumbline's JSON output; install it on the runner, or call the plumbline CLI directly (see 'plumbline help ci')"
+          exit 1
+        fi
+        plumbline assess --json --quiet "$PL_PATH" > "${RUNNER_TEMP}/plumbline.json"
+        level=$(jq -r '.verdict.level' "${RUNNER_TEMP}/plumbline.json")
+        name=$(jq -r '.verdict.name' "${RUNNER_TEMP}/plumbline.json")
+        gap=$(jq -r '.verdict.next_gap // [] | join(" ")' "${RUNNER_TEMP}/plumbline.json")
+        echo "level=${level}" >> "$GITHUB_OUTPUT"
+        echo "level-name=${name}" >> "$GITHUB_OUTPUT"
+        echo "next-gap=${gap}" >> "$GITHUB_OUTPUT"
+        echo "ACMM level ${level} — ${name}"
+
+    - name: Snapshot
+      if: inputs.snapshot != ''
+      shell: bash
+      env:
+        PL_PATH: ${{ inputs.path }}
+        PL_SNAPSHOT: ${{ inputs.snapshot }}
+      run: plumbline snapshot --out "$PL_SNAPSHOT" "$PL_PATH"
+
+    - name: Badge
+      if: inputs.badge != ''
+      shell: bash
+      env:
+        PL_PATH: ${{ inputs.path }}
+        PL_BADGE: ${{ inputs.badge }}
+        PL_BADGE_LABEL: ${{ inputs.badge-label }}
+      run: |
+        set -euo pipefail
+        plumbline badge --label "$PL_BADGE_LABEL" --out "$PL_BADGE" "$PL_PATH"
+
+    - name: Job summary
+      if: inputs.summary == 'true'
+      shell: bash
+      env:
+        PL_PATH: ${{ inputs.path }}
+      run: plumbline assess --report markdown --out - --quiet "$PL_PATH" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Badge drift gate
+      if: inputs.badge != '' && inputs.badge-drift-check == 'true'
+      shell: bash
+      env:
+        PL_BADGE: ${{ inputs.badge }}
+      run: |
+        set -euo pipefail
+        # The committed badge is a claim about this repo. The SVG is
+        # byte-stable for an unchanged verdict, so an honest badge
+        # produces no diff here.
+        #
+        # `git diff` only compares tracked files: a badge that was
+        # generated but never committed produces no diff either, which
+        # would leave this gate green forever. Check it is tracked first.
+        if ! git ls-files --error-unmatch -- "$PL_BADGE" >/dev/null 2>&1; then
+          echo "::error::${PL_BADGE} is not committed — run 'plumbline badge' and commit the result"
+          exit 1
+        fi
+        if ! git diff --exit-code -- "$PL_BADGE"; then
+          echo "::error::${PL_BADGE} is out of date — run 'plumbline badge' and commit the result"
+          exit 1
+        fi
+
+    # Both gates run last on purpose. Composite steps stop at the first
+    # failure, so anything placed after a gate is lost on exactly the run
+    # where the author most needs it — hence badge, snapshot, and job
+    # summary all come first, and the two failing checks come after.
+    - name: ACMM gate
+      if: inputs.fail-below != '0' && inputs.fail-below != ''
+      shell: bash
+      env:
+        PL_PATH: ${{ inputs.path }}
+        PL_FAIL_BELOW: ${{ inputs.fail-below }}
+      run: plumbline assess --fail-below "$PL_FAIL_BELOW" --quiet "$PL_PATH"

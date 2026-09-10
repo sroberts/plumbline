@@ -61,11 +61,13 @@ plumbline [global flags] <command> [args]
 | `plumbline explain <signal-id>` | Print a signal's description, detection rule, and rationale. **Static** — does not scan a repo. | no |
 | `plumbline schema <name>` | Emit JSON Schema for a public output type (`verdict`, `signal-result`, `event`, `config`). For machine consumers. | no |
 | `plumbline fix <signal-id> [path]` | Scaffold the artifact a signal is looking for. **Dry-run by default**; `--apply` writes. `--input KEY=VALUE` (repeatable) supplies content the fix needs; unsupplied inputs get `TODO:`-marked placeholders. `--json` for a tool harness. Only some signals have fixers — see "Scaffolding scope" below. | no |
+| `plumbline badge [path]` | Render the verdict as a self-contained SVG status badge for the README. Writes `.plumbline-badge.svg` by default; `--out -` streams. `--label` sets the left-hand text; `--from <artifact>` renders from an existing snapshot instead of rescanning. | no |
+| `plumbline install-ci [path]` | Scaffold the GitHub Actions workflow that runs plumbline itself (`--variant full\|gate\|badge`, `--fail-below N`, `--out`). **Dry-run by default**; `--apply` writes. `--list` prints variants and exits. See "Scaffolding scope" below for why this is the *only* workflow plumbline will write. | picker |
 | `plumbline install-skill [path]` | Write plumbline's own usage guide into the location a coding-agent tool expects (`--target claude\|cursor\|gemini\|codex\|opencode\|windsurf\|cline\|copilot`). **Dry-run by default**; `--apply` writes. `--global` installs under `$HOME` instead of the repo; `--list` prints targets and exits. | picker |
 | `plumbline help [topic]` | Long-form help on a topic (`signals`, `scoring`, `levels`, `output`, `config`, `ci`, `agents`, `profiles`). Output is plain markdown so an LLM agent can ingest it directly. | no |
 | `plumbline version` | Print build version + commit. Supports `--json`. | no |
 
-`fix` and `install-skill` are the only commands that write inside a target repo (§11). Both are dry-run by default and both refuse to overwrite an existing file.
+`fix`, `install-skill`, and `install-ci` are the only commands that write inside a target repo (§11). All three are dry-run by default and all three refuse to overwrite an existing file. `badge` also writes, and has to overwrite — regenerating in place is the whole workflow — so it draws the line differently: every badge carries a generated-file marker comment, and `badge` refuses any `--out` target that exists without one. `--out README.md` is a typo, not an instruction.
 
 ### Scaffolding scope
 
@@ -78,7 +80,7 @@ plumbline [global flags] <command> [args]
 | `l2.pr-template` | `.github/pull_request_template.md` |
 | `l2.commit-rules` | `.gitmessage` |
 
-Every other signal returns `signal "<id>" has no fixer` and exits 2. **Plumbline generates no CI workflow files at all** — no `.github/workflows/*.yml`, at any level.
+Every other signal returns `signal "<id>" has no fixer` and exits 2. **No signal fixer writes a CI workflow file** — `plumbline fix` will not emit `.github/workflows/*.yml` at any level.
 
 That is a deliberate limit, not a backlog item. Three reasons:
 
@@ -89,6 +91,40 @@ That is a deliberate limit, not a backlog item. Three reasons:
 L3+ remediation is therefore advisory: `Result.FixHint` describes the shape to build (measure → compare → fail), and `--debug` (§8.2.7) shows which probe missed so a user can tell a detector gap from a real one. **A detector gap is a bug against the detector** — the fix hints say so, and a repo should never be reshaped to match a matcher.
 
 If scaffolding above L2 is ever added, the shape that avoids reason 1: generate a clearly-labelled starting point, then re-run detection against it and report the result honestly, rather than assuming the signal is satisfied because plumbline wrote the file.
+
+#### The one carve-out: `plumbline install-ci`
+
+`install-ci` writes a workflow file, which the rule above otherwise
+forbids. The carve-out is deliberate and deliberately narrow: **the only
+workflow plumbline will generate is the one that runs plumbline.** It
+writes no coverage gate, no nightly suite, no error-monitoring hook, no
+triage automation — none of the shapes reason 1 is about. Those remain
+advisory, via `fix_hint`.
+
+Reason 1 still partly applies and is worth stating plainly rather than
+explaining away. The generated workflow *is* detected: `l3.build-lint-gate`
+scores it `partial` (0.67), because a step that runs an assessment and
+fails the build on the result is genuinely gate-shaped. So plumbline does
+credit a file plumbline wrote.
+
+Two things bound the damage, and one test enforces the bound:
+
+- It is not the codecov.yml failure mode from reason 2. That file
+  satisfied a matcher while gating nothing. This workflow really does run
+  on every PR and really does fail the build — the loop it claims exists,
+  exists.
+- Partial credit on one L3 signal cannot carry a level on its own.
+  `TestInstallCI_CannotBootstrapALevel` asserts that installing the
+  workflow leaves the verdict unmoved; if a catalog change ever makes
+  self-installation enough to climb a level, that test fails.
+
+What the carve-out does **not** license: crediting a repo for gating its
+own build when all it gates is plumbline. A repo whose tests still do not
+run in CI is not a Measured codebase because it installed this file. A
+future catalog revision that distinguishes "gates the repo's own build"
+from "gates something" would be the principled fix; until then the
+partial score is the honest one — the shape is there, the coverage of it
+is not.
 
 ### Global flags
 
@@ -741,6 +777,62 @@ This makes a **CI drift gate** a one-liner: regenerate the artifact and fail if 
 ```
 
 Every change that moves plumbline's assessment then shows up as a reviewable diff in the PR instead of silently rotting. This is the L3 measurement loop applied to the repo itself — the artifact is collected **and acted on**, avoiding the *dashboard graveyard* anti-pattern (metrics gathered but never gating anything). plumbline runs exactly this gate on itself in `.github/workflows/ci.yml`.
+
+### `plumbline badge`
+
+`badge` renders the verdict as a **self-contained SVG** for the README:
+
+```
+plumbline badge                    # writes .plumbline-badge.svg
+plumbline badge --out - > b.svg    # stream instead
+plumbline badge --from .plumbline.toon
+```
+
+```markdown
+![ACMM level](.plumbline-badge.svg)
+```
+
+The badge is self-hosted rather than a shields.io endpoint, and that is
+the whole design decision. §1 commits plumbline to making no network
+calls; a shields endpoint would keep that true for the *tool* while
+quietly breaking it for the *reader*, who would fetch a third-party URL
+on every page view. A committed SVG renders in private repos, behind a
+proxy, and offline. Markup follows the shields "flat" geometry (20px
+tall, `rx="3"`, 10× coordinates under `transform="scale(.1)"`) so it
+sits flush in a row of conventional badges.
+
+Text width is estimated from a per-character advance table for 11px
+Verdana (`internal/badge`), not measured with a real shaper. Shipping a
+font to center text in a 20px strip is the wrong trade; the table only
+needs to be accurate enough that glyphs never collide with the rounded
+edge.
+
+Color is a red → brightgreen ramp keyed to the level, so a reader who
+has never heard of the ACMM still reads "further right is better". Each
+level gets a distinct stop; an out-of-range level renders grey, since
+"unknown" is not "bad".
+
+Like `snapshot`, output is **byte-stable** for an unchanged verdict —
+nothing volatile is embedded. That is what makes the drift gate a
+one-liner:
+
+```yaml
+- run: |
+    plumbline badge --out .plumbline-badge.svg .
+    git diff --exit-code -- .plumbline-badge.svg \
+      || { echo "::error::badge is stale — run 'plumbline badge' and commit"; exit 1; }
+```
+
+The generated workflow pins `--label` explicitly rather than relying on
+the CLI default. A badge committed under one label and regenerated under
+another differs on every byte, so the drift gate would fail forever with
+an error message that sends the user in a circle; `install-ci
+--badge-label` and `plumbline badge --label` have to agree, and pinning
+the value in the workflow is what makes that checkable.
+
+`--from` renders from an artifact `snapshot` already wrote rather than
+rescanning, so a workflow that produces both cannot emit a badge and a
+snapshot that disagree.
 
 ### `plumbline diff`
 
