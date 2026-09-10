@@ -307,6 +307,7 @@ Signals are derived directly from Table 2 ("Complete Feedback Loop Inventory") o
 | `l4.threshold-block` | A workflow conditional reads from a metrics file and fails based on a threshold (`if: fromJson(...).rate < N`). |
 | `l4.worktree-agents` | Repo contains `.devcontainer/`, agent runner config (`.claude/`, `.github/agents/`), or scripts referencing concurrent worktrees. |
 | `l4.error-recovery` | Workflows use `continue-on-error` + retry steps, or `nick-fields/retry` action. |
+| `l4.measurement-backed` | The **autonomy-without-guardrails** check. If any workflow modifies the repo or its tracker without a human in the path (`create-pull-request`, `git push`, `gh pr merge`, `gh issue create`, automerge actions), a `push`/`pull_request`-triggered workflow must contain something that can fail the change. Scheduled suites don't count — a nightly reports, it doesn't block a merge. `NA` when there's no such automation. |
 
 **Level 5 — Self-Sustaining**
 
@@ -357,6 +358,16 @@ The concrete case (github.com/sroberts/decant, a Go library) scored 0.67 on both
 - Generic threshold flags need a context check. `--fail-below` was matching plumbline's own `plumbline assess --fail-below 3` maturity gate in `canary-repos.yml` and crediting it as a coverage gate.
 - When a signal can only confirm intent rather than execution — a step *named* `Lint` running an unrecognized script — it may still fire, but at low confidence. Reporting nothing is worse; reporting it as certain is dishonest.
 - Detector gaps are bugs against the detector. The `l3.build-lint-gate` fix hint now says so, rather than telling a team to add a step they already run.
+
+#### L4: autonomy without guardrails, graded the same way
+
+`l4.measurement-backed` is the second of the paper's two anti-patterns, modelled identically to the L3 one below: it asks the positive question — is the autonomy in this repo backed by a gate that can stop it? — and returns `Missing` for the anti-pattern, `NA` when there's no repo-modifying automation to grade.
+
+The paper's claim is that levels are sequential: L4 without L3 isn't "most of the way to L4", it's a machine committing to a codebase nothing is checking. This detector asks that question in the form a static scan can answer: does automation that mutates the repo coexist with a `push`/`pull_request` workflow containing something that can fail?
+
+Scheduled workflows are deliberately excluded from counting as guardrails. A nightly suite reports; it does not block a merge. Counting one would pass exactly the repos this signal exists to catch.
+
+**Limits:** a `Found` here means a blocking gate exists in the same repo as the autonomy. It does **not** establish that the gate covers the code path the automation touches, nor that branch protection requires the check to pass — branch protection is repo configuration, not filesystem state, and plumbline does not read it. Both caveats ship in the result's notes rather than living only here. Confidence is capped at medium.
 
 #### L3: the dashboard graveyard is graded as a positive signal, not an inverted one
 
