@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Plumbline is **implemented and shipping**. It is a Go module
 (`github.com/sroberts/plumbline`, Go 1.26.1) with a Cobra CLI, a Bubble Tea
-TUI, a 22-signal detector catalog, GoReleaser packaging, and eight CI
+TUI, a 23-signal detector catalog, GoReleaser packaging, and nine CI
 workflows. It assesses itself at ACMM Level 5.
 
 `SPEC.md` is the implementation contract — numbered sections, cited
@@ -14,7 +14,8 @@ throughout the source (`SPEC.md §6` = signal model, `§7` = scoring, `§9` =
 output formats). Read the relevant section before changing behavior it
 pins. The ACMM paper is the *model* source; SPEC.md is what plumbline
 actually does, and §6's "Deviations from the source paper" records where
-the two diverge on purpose.
+the two diverge on purpose. It is a contract, not a sketch: change it in
+the same commit as the behavior it describes.
 
 ## Build & test
 
@@ -43,8 +44,21 @@ make lint       # gofmt + go vet (golangci-lint if installed)
   Don't add a fixer for a signal whose remedy needs real judgment (which
   monitoring SDK, which triage rules) — the `fix_hint` prose is the answer
   there.
-- `internal/fix` — the only place plumbline writes inside a target repo.
-  Refuses overwrite; in-repo paths only.
+- `internal/workflows` — GitHub Actions YAML parsed into a CI-agnostic
+  AST. Workflow signals go through it, never raw YAML regex; if the AST
+  cannot express what a detector needs, extend the AST.
+- `internal/badge` — the SVG `plumbline badge` writes. Self-contained (no
+  shields.io round-trip); output must stay byte-stable or the drift gate
+  churns.
+- `internal/ciworkflow` — the workflow `plumbline install-ci` writes, and
+  the variant registry behind both the CLI `--list` and the TUI `[w]`
+  picker. The *only* workflow plumbline generates; read SPEC.md §4 "The
+  one carve-out" before widening it.
+- `internal/fix` — where `fix`, `install-skill`, and `install-ci` write
+  inside a target repo. Refuses overwrite; in-repo paths only. `plumbline
+  badge` is the one writer that bypasses it, because regenerating in place
+  is the point — it refuses any `--out` target that exists without the
+  generated-file marker.
 
 ## Generated and derived files — don't hand-edit
 
@@ -59,9 +73,22 @@ make lint       # gofmt + go vet (golangci-lint if installed)
   `plumbline install-skill`; `.claude/` is gitignored, so the *source of
   truth is `internal/skill/skill.go`*. Edit the const there, rebuild, then
   reinstall. Editing the SKILL.md alone loses the change.
+- `.plumbline-badge.svg` — the committed status badge the README links.
+  Regenerate with `plumbline badge`; `.github/workflows/maturity.yml`
+  fails if the committed copy is stale *or untracked*.
 - `.coverage-floor` — a one-way ratchet (currently 60). CI enforces it;
   `coverage-ratchet.yml` raises it 1pp when coverage runs 3pp clear. Never
   lower it to make a build pass.
+
+**Signal IDs are public API.** A rename needs a deprecation alias that
+rewrites and warns for at least one minor version (`internal/signals/aliases.go`).
+
+**A detector gap is a bug against the detector.** A repo with a working
+feedback loop that plumbline scores as missing is a defect here, not a
+prompt for the user to reshape their CI to match a matcher. `--debug`
+prints which probe missed, so a gap can be told from a real absence. See
+SPEC.md §6 "Deviations from the source paper" for how that principle got
+written down the hard way.
 
 **Adding a signal is not a single-file change.** The detector is one file,
 but the skill body in `internal/skill/skill.go` hand-lists every signal ID,
@@ -92,8 +119,8 @@ The author's KubeStellar Console reference points (paths and cron cadences) are 
 
 Two anti-patterns the assessor should also flag:
 
-- **Dashboard graveyard** (L3 anti-pattern): metrics collected, never acted on.
-- **Autonomy without guardrails** (L4 anti-pattern): automation present, but the L3 measurement layer it depends on is missing — a level cannot be skipped.
+- **Dashboard graveyard** (L3 anti-pattern): metrics collected, never acted on. Detected by `l3.metrics-acted-on`, which inverts the *framing* rather than the score — it asks whether collected numbers gate anything, so `Found` keeps meaning "good" everywhere in the catalog.
+- **Autonomy without guardrails** (L4 anti-pattern): automation present, but the L3 measurement layer it depends on is missing — a level cannot be skipped. Detected by `l4.measurement-backed`.
 
 ## Working norms specific to this repo
 
