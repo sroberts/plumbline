@@ -1,5 +1,7 @@
 # plumbline
 
+![ACMM level](.plumbline-badge.svg)
+
 Repo-level AI coding readiness assessment, in Go.
 
 Plumbline scans a repository, looks for the feedback loops that make AI-driven development reliable (instruction files, coverage gates, nightly suites, automated triage, issue-to-PR pipelines), and reports which level of the **AI Codebase Maturity Model (ACMM)** the repo sits at. Detection is deterministic — no LLM calls, no network.
@@ -47,6 +49,13 @@ plumbline fix l2.agent-instructions --apply
 
 # Install a Claude Code skill so AI agents in your repo know how to drive plumbline.
 plumbline install-skill --apply
+
+# Render the README status badge (self-contained SVG, no third-party service).
+plumbline badge
+
+# Scaffold the GitHub Actions workflow that runs plumbline (dry-run; --apply to write).
+plumbline install-ci --fail-below 3
+plumbline install-ci --fail-below 3 --apply
 ```
 
 ## ACMM levels
@@ -84,6 +93,7 @@ Plumbline mostly follows Table 2 of the paper, but a few signals are intentional
 | `--report markdown --out maturity.md` | Committable report |
 | `--report sarif --out plumbline.sarif` | GitHub code-scanning |
 | `snapshot` → `.plumbline.toon` | Committable maturity-state artifact (TOON; `--format json\|yaml` to force) |
+| `badge` → `.plumbline-badge.svg` | Committable SVG status badge for the README |
 | `--events ndjson` on stderr | Per-signal progress events while scanning |
 
 TOON is the default CLI output: on a terminal you get the TUI, and everywhere else (pipes, CI) `plumbline assess` emits TOON. `--report json` (or `--json`), `toon`, and `yaml` are lossless re-encodings of the same report — same fields, different notation. [TOON](https://github.com/toon-format/spec) is compact and token-efficient, which is why it's both the default output and the default `snapshot` format.
@@ -98,6 +108,8 @@ Schemas are published via `plumbline schema {verdict, signal-result, event, conf
 | `enter` | Open the detail screen for the selected signal |
 | `a` | Apply the signal's fix (only on signals marked `✚`) |
 | `r` | Re-run the scan in place |
+| `i` | Install plumbline's usage guide for a coding-agent tool (target picker) |
+| `w` | Install the GitHub Actions workflow that runs plumbline (variant picker) |
 | `esc` | Back |
 | `q` / `ctrl-c` | Quit |
 
@@ -105,7 +117,7 @@ In the fix flow: `tab`/`shift+tab` between input fields, `enter` advances, `y`/`
 
 ## Apply fixes (safety)
 
-`plumbline fix` is the **only** path through which plumbline writes inside the target repo. Defaults are conservative:
+`plumbline fix`, `plumbline install-skill`, and `plumbline install-ci` are the only paths through which plumbline writes inside the target repo (`plumbline badge` also writes, but only its own SVG, at a path you name). Defaults are conservative:
 
 - Dry-run by default; `--apply` is required to actually write.
 - `create-file` refuses to overwrite an existing file.
@@ -115,7 +127,64 @@ In the fix flow: `tab`/`shift+tab` between input fields, `enter` advances, `y`/`
 
 Everything else (`assess`, `inspect`, `signals`, `explain`, `schema`, `help`, `version`) is read-only.
 
-## CI gate (GitHub Actions)
+## Run plumbline in CI
+
+Let plumbline write the workflow:
+
+```bash
+plumbline install-ci --fail-below 3          # dry run — prints what it would write
+plumbline install-ci --fail-below 3 --apply  # write .github/workflows/plumbline.yml
+```
+
+Three variants (`--variant`, or press `w` in the TUI):
+
+| Variant | What the workflow does |
+|---|---|
+| `full` (default) | Fail below a level **and** keep the README badge current |
+| `gate` | Fail the build when the repo assesses below a minimum ACMM level |
+| `badge` | Regenerate the README badge and fail if the committed copy is stale |
+
+Omit `--fail-below` to install the measurement without the enforcement — worth doing first in a repo that isn't yet at the level it wants, since a gate that's red on the day it lands gets deleted rather than fixed.
+
+**Scope note.** This is the only workflow plumbline will ever generate: the one that runs plumbline. It writes no coverage gate, no nightly suite, no triage automation — those stay advisory (`fix_hint`), for the reasons in [SPEC.md §4](SPEC.md). The generated workflow *is* detected, at partial credit on `l3.build-lint-gate`, which is plumbline crediting a file plumbline wrote; a test pins the bound that this can never be enough to climb a level on its own.
+
+### Status badge
+
+`plumbline badge` renders a **self-contained SVG** you commit and reference with a relative path:
+
+```bash
+plumbline badge   # writes .plumbline-badge.svg
+```
+
+```markdown
+![ACMM level](.plumbline-badge.svg)
+```
+
+Self-hosted, not a shields.io endpoint. plumbline makes no network calls, and a committed SVG keeps that true for the reader too: it renders in private repos, behind a proxy, and offline. The cost of self-hosting is staleness — so gate it. The SVG is byte-stable for an unchanged verdict, which makes regenerate-and-diff sufficient:
+
+```yaml
+- run: |
+    plumbline badge --out .plumbline-badge.svg .
+    git diff --exit-code -- .plumbline-badge.svg \
+      || { echo "::error::badge is stale — run 'plumbline badge' and commit"; exit 1; }
+```
+
+A drifted badge then shows up as a reviewable change in the PR that caused it, rather than as a claim about the repo that quietly stopped being true. The badge at the top of this README is generated exactly this way and gated in [`.github/workflows/maturity.yml`](.github/workflows/maturity.yml).
+
+### As a composite action
+
+plumbline ships an [`action.yml`](action.yml), so a consumer repo can skip the install steps:
+
+```yaml
+- uses: sroberts/plumbline@v1
+  with:
+    fail-below: '3'
+    badge: .plumbline-badge.svg
+```
+
+Inputs: `path`, `version`, `go-version`, `fail-below`, `badge`, `badge-label`, `badge-drift-check`, `snapshot`, `summary`. Outputs: `level`, `level-name`, `next-gap`. The gate step runs **last**, so a failing gate still leaves the badge and job summary behind — which is the run where you most want them.
+
+### By hand
 
 ```yaml
 # .github/workflows/maturity.yml

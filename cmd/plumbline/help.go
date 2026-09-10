@@ -238,7 +238,43 @@ Unknown keys are a hard error — typos shouldn't silently disable signals.
 
 const helpCI = `# Wiring plumbline into CI
 
-## GitHub Actions
+The fastest path is to let plumbline write the workflow:
+
+  plumbline install-ci --fail-below 3          # dry run
+  plumbline install-ci --fail-below 3 --apply  # write it
+
+That installs .github/workflows/plumbline.yml. Three variants:
+
+  full    gate + badge      fail below a level, and keep the badge current
+  gate    maturity gate     fail the build below a minimum ACMM level
+  badge   badge drift gate  regenerate the README badge, fail if stale
+
+The TUI has the same picker: press [w] on the results screen.
+
+## The status badge
+
+'plumbline badge' renders a self-contained SVG you commit and reference
+from the README with a relative path:
+
+  plumbline badge                       # writes .plumbline-badge.svg
+  # README.md:
+  ![ACMM level](.plumbline-badge.svg)
+
+The badge is self-hosted rather than a shields.io endpoint. plumbline
+makes no network calls, and a committed SVG keeps that true for the
+reader: it renders in private repos, behind a proxy, and offline.
+
+The cost of self-hosting is staleness, so gate it. The SVG is byte-stable
+for an unchanged verdict, which makes regenerate-and-diff sufficient:
+
+  plumbline badge --out .plumbline-badge.svg .
+  git diff --exit-code -- .plumbline-badge.svg || exit 1
+
+A badge that has drifted then shows up as a reviewable change in the PR
+that caused it, rather than as a claim about the repo that quietly
+stopped being true.
+
+## By hand
 
   name: ACMM gate
   on: pull_request
@@ -252,6 +288,20 @@ const helpCI = `# Wiring plumbline into CI
             go-version: stable
         - run: go install github.com/sroberts/plumbline/cmd/plumbline@latest
         - run: plumbline assess --fail-below 3 --quiet
+
+## As a composite action
+
+plumbline ships an action.yml, so a consumer repo can skip the install
+steps entirely:
+
+  - uses: sroberts/plumbline@v1
+    with:
+      fail-below: '3'
+      badge: .plumbline-badge.svg
+
+Outputs: level, level-name, next-gap. The gate step runs last, so a
+failing gate still leaves the badge and job summary behind — which is
+the run where you most want them.
 
 Exit codes:
   0  scan ok, gate passed (or no gate set)

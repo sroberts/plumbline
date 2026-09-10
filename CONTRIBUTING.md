@@ -53,6 +53,14 @@ CI (`.github/workflows/ci.yml`) runs the same gate on every PR.
 - **Workflows AST:** `internal/workflows` — GitHub Actions YAML parser.
 - **Embedded skill bodies:** `internal/skill` — what
   `plumbline install-skill` writes for each agent target.
+- **Badge rendering:** `internal/badge` — the SVG `plumbline badge`
+  writes. Self-contained by design (no shields.io round-trip); output
+  must stay byte-stable or the drift gate churns.
+- **CI workflow scaffolding:** `internal/ciworkflow` — the workflow
+  `plumbline install-ci` writes, plus the variant registry the CLI
+  `--list` and the TUI `[w]` picker both render. This is the *only*
+  workflow plumbline generates; see SPEC.md §4 "The one carve-out"
+  before widening it.
 - **TUI:** `internal/tui` — Bubble Tea screens + picker flows.
 
 ## Style

@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/sroberts/plumbline/internal/ciworkflow"
 	"github.com/sroberts/plumbline/internal/fix"
 	"github.com/sroberts/plumbline/internal/scanner"
 	"github.com/sroberts/plumbline/internal/signals"
@@ -65,6 +66,7 @@ const (
 	screenFixPreview
 	screenFixDone
 	screenSkillTargets
+	screenCIVariants
 	screenError
 )
 
@@ -98,6 +100,12 @@ type model struct {
 	// row; skillGlobal toggles project-scope vs user-scope install.
 	skillCursor int
 	skillGlobal bool
+
+	// CI-workflow picker state. ciCursor tracks the highlighted
+	// variant; ciFailBelow is the gate floor the workflow will
+	// enforce (0 = install the measurement with no enforcement).
+	ciCursor    int
+	ciFailBelow int
 }
 
 // New returns a model wired to the given scan function.
@@ -164,6 +172,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.updateFixDone(msg)
 		case screenSkillTargets:
 			return m.updateSkillTargets(msg)
+		case screenCIVariants:
+			return m.updateCIVariants(msg)
 		case screenError:
 			if msg.String() == "q" {
 				return m, tea.Quit
@@ -193,6 +203,8 @@ func (m *model) updateResults(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.rescan()
 	case "i":
 		return m.startInstallSkill()
+	case "w":
+		return m.startInstallCI()
 	}
 	return m, nil
 }
@@ -381,13 +393,19 @@ func (m *model) generatePlan() (tea.Model, tea.Cmd) {
 func (m *model) updateFixPreview(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc", "n":
-		// Cancel: return to whichever screen got us here. Skill installs
-		// arrived from the picker; signal fixes from the detail screen.
+		// Cancel: return to whichever screen got us here. Skill and CI
+		// installs arrived from their pickers; signal fixes from the
+		// detail screen. Read the plan *before* clearing it — the
+		// routing depends on it.
+		plan := m.fixPlan
 		m.fixer = nil
 		m.fixPlan = acmm.FixPlan{}
-		if m.skillGlobal || isSkillPlan(m.fixPlan) {
+		switch {
+		case isCIPlan(plan):
+			m.screen = screenCIVariants
+		case m.skillGlobal || isSkillPlan(plan):
 			m.screen = screenSkillTargets
-		} else {
+		default:
 			m.screen = screenDetail
 		}
 		return m, nil
@@ -419,6 +437,137 @@ func (m *model) updateFixPreview(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // "install-skill:<target>"; signal plans use the signal ID.
 func isSkillPlan(p acmm.FixPlan) bool {
 	return strings.HasPrefix(p.SignalID, "install-skill:")
+}
+
+// isCIPlan reports whether the given FixPlan came from the install-ci
+// flow. The plan IDs are "install-ci:<variant>".
+func isCIPlan(p acmm.FixPlan) bool {
+	return strings.HasPrefix(p.SignalID, "install-ci:")
+}
+
+// ciWorkflowMissing reports whether the repo has no plumbline workflow
+// at the default path. The TUI hides the [w] install hint when one is
+// already there: the install is a create-file, so offering it would
+// only produce a refusal.
+func ciWorkflowMissing(idx *scanner.RepoIndex) bool {
+	if idx == nil {
+		return false
+	}
+	_, err := idx.Read(ciworkflow.DefaultPath)
+	return err != nil
+}
+
+// ciGateFloors is the cycle the [f] key walks. 0 means "install the
+// measurement with no enforcement" — the right first step for a repo
+// that is not yet at the level it wants, since a gate that is red on
+// the day it lands gets deleted rather than fixed.
+var ciGateFloors = []int{0, 2, 3, 4, 5}
+
+// startInstallCI opens the workflow picker. The gate floor defaults to
+// the level the repo *already* assesses at, so the installed workflow
+// locks in what has been achieved instead of failing on its first run.
+func (m *model) startInstallCI() (tea.Model, tea.Cmd) {
+	if m.idx == nil {
+		return m, nil
+	}
+	m.ciCursor = 0
+	m.ciFailBelow = 0
+	if lvl := int(m.report.Verdict.Level); lvl >= 2 && lvl <= 5 {
+		m.ciFailBelow = lvl
+	}
+	m.screen = screenCIVariants
+	return m, nil
+}
+
+// updateCIVariants handles input on the CI-workflow picker.
+//
+//	↑/↓ or j/k    move highlight
+//	f             cycle the gate floor (none, L2-L5)
+//	enter         build the plan and go to screenFixPreview
+//	esc           back to results
+//	q             quit
+func (m *model) updateCIVariants(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	variants := ciworkflow.Variants()
+	switch msg.String() {
+	case "q":
+		return m, tea.Quit
+	case "esc":
+		m.screen = screenResults
+		return m, nil
+	case "down", "j":
+		if m.ciCursor < len(variants)-1 {
+			m.ciCursor++
+		}
+		return m, nil
+	case "up", "k":
+		if m.ciCursor > 0 {
+			m.ciCursor--
+		}
+		return m, nil
+	case "f":
+		m.ciFailBelow = nextGateFloor(m.ciFailBelow)
+		return m, nil
+	case "enter":
+		if m.ciCursor < 0 || m.ciCursor >= len(variants) {
+			return m, nil
+		}
+		plan, err := ciworkflow.NewPlan(ciworkflow.Options{
+			Variant:   variants[m.ciCursor].ID,
+			FailBelow: m.ciFailBelow,
+		})
+		if err != nil {
+			m.fixErr = err
+			m.screen = screenFixDone
+			return m, nil
+		}
+		m.fixer = nil
+		m.fixPlan = plan
+		m.screen = screenFixPreview
+	}
+	return m, nil
+}
+
+// nextGateFloor advances to the next value in ciGateFloors, wrapping.
+// An unrecognized current value restarts the cycle rather than sticking.
+func nextGateFloor(current int) int {
+	for i, f := range ciGateFloors {
+		if f == current {
+			return ciGateFloors[(i+1)%len(ciGateFloors)]
+		}
+	}
+	return ciGateFloors[0]
+}
+
+// renderCIVariants shows the CI-workflow picker: one row per variant,
+// plus the currently selected gate floor and the install path.
+func (m *model) renderCIVariants() string {
+	var b strings.Builder
+	b.WriteString(styleHeader.Render("Install CI workflow — pick what it should do"))
+	b.WriteString("\n")
+	b.WriteString(strings.Repeat("─", min(60, m.viewWidth())))
+	b.WriteString("\n")
+
+	gate := styleNA.Render("none (report only)")
+	if m.ciFailBelow > 0 {
+		gate = styleHeader.Render(fmt.Sprintf("fail below L%d", m.ciFailBelow))
+	}
+	b.WriteString(fmt.Sprintf("Gate:  %s\n", gate))
+	b.WriteString(fmt.Sprintf("Path:  %s\n", ciworkflow.DefaultPath))
+	b.WriteString(m.renderHint("[f] cycle gate floor"))
+	b.WriteString("\n\n")
+
+	for i, v := range ciworkflow.Variants() {
+		line := fmt.Sprintf("  %-7s %-18s %s", v.ID, v.Name, v.Desc)
+		if i == m.ciCursor {
+			line = styleSelected.Render(line)
+		}
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(m.renderHint("[↑/↓] select   [enter] preview   [f] gate   [esc] back   [q] quit"))
+	return b.String()
 }
 
 func (m *model) updateFixDone(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -489,6 +638,8 @@ func (m *model) View() string {
 		return m.renderFixDone()
 	case screenSkillTargets:
 		return m.renderSkillTargets()
+	case screenCIVariants:
+		return m.renderCIVariants()
 	}
 	return ""
 }
@@ -553,6 +704,9 @@ func (m *model) renderResults() string {
 	hint := "[↑/↓] select   [enter] detail   [r] rescan   [✚=fixable]"
 	if anySkillTargetMissing(m.idx) {
 		hint += "   [i] install skill"
+	}
+	if ciWorkflowMissing(m.idx) {
+		hint += "   [w] install CI"
 	}
 	hint += "   [q] quit"
 	b.WriteString(m.renderHint(hint))

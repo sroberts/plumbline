@@ -1,0 +1,165 @@
+// Package badge renders an ACMM verdict as a self-contained SVG status
+// badge for a repository README.
+//
+// The badge is deliberately self-hosted rather than a shields.io
+// endpoint: plumbline makes no network calls (SPEC.md §1), and a badge
+// committed next to the README keeps that property for the reader too —
+// it renders in private repos, behind a proxy, and offline, with no
+// third-party service in the path. The trade is that the file has to be
+// regenerated when the verdict moves, which is what the CI drift gate
+// is for (SPEC.md §9).
+//
+// The markup follows the shields.io "flat" geometry (20px tall, 3px
+// corner radius, 10x coordinates under transform="scale(.1)") so a
+// plumbline badge sits flush in a row of conventional badges.
+package badge
+
+import (
+	"bytes"
+	"fmt"
+	"html"
+	"math"
+
+	"github.com/sroberts/plumbline/pkg/acmm"
+)
+
+// DefaultLabel is the left-hand side of the badge. "ACMM" names the
+// model rather than the tool: the reader cares which maturity model
+// produced the number.
+const DefaultLabel = "ACMM"
+
+// Options tunes the rendered badge.
+type Options struct {
+	// Label is the left-hand text. Empty means DefaultLabel.
+	Label string
+}
+
+// Message returns the right-hand badge text for a verdict — e.g.
+// "L3 Measured". The number carries the ordering, the name carries the
+// meaning; neither reads well alone.
+func Message(v acmm.Verdict) string {
+	name := v.Name
+	if name == "" {
+		name = v.Level.Name()
+	}
+	return fmt.Sprintf("L%d %s", v.Level, name)
+}
+
+// Color returns the badge fill for a level, as a hex literal. The ramp
+// is the conventional shields red → brightgreen progression, so a
+// reader who has never heard of the ACMM still reads "further right is
+// better" at a glance. Every level gets a distinct stop.
+func Color(l acmm.Level) string {
+	switch l {
+	case acmm.LevelAssisted:
+		return "#e05d44" // red
+	case acmm.LevelInstructed:
+		return "#fe7d37" // orange
+	case acmm.LevelMeasured:
+		return "#dfb317" // yellow
+	case acmm.LevelAdaptive:
+		return "#97ca00" // green
+	case acmm.LevelSelfSustaining:
+		return "#4c1" // brightgreen
+	default:
+		return "#9f9f9f" // grey — an out-of-range level is "unknown", not "bad"
+	}
+}
+
+// SVG renders the verdict as a complete, standalone SVG document.
+// Output is byte-stable for a given (verdict, options) pair — the CI
+// drift gate depends on it.
+func SVG(v acmm.Verdict, opts Options) []byte {
+	label := opts.Label
+	if label == "" {
+		label = DefaultLabel
+	}
+	message := Message(v)
+
+	// Geometry, in the 1x coordinate space. Text is padded by 5px on
+	// each side of its half; shields uses the same 10px-per-half.
+	const (
+		height  = 20
+		padding = 10
+	)
+	labelW := int(math.Round(textWidth(label))) + padding
+	msgW := int(math.Round(textWidth(message))) + padding
+	total := labelW + msgW
+
+	// Text anchors sit at the center of each half, expressed in the
+	// 10x space the <g> transform scales back down.
+	labelX := labelW * 10 / 2
+	msgX := labelW*10 + msgW*10/2
+
+	accessible := html.EscapeString(label + ": " + message)
+	esc := func(s string) string { return html.EscapeString(s) }
+
+	var b bytes.Buffer
+	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" role="img" aria-label="%s">`+"\n",
+		total, height, accessible)
+	fmt.Fprintf(&b, `  <title>%s</title>`+"\n", accessible)
+	fmt.Fprint(&b, `  <linearGradient id="s" x2="0" y2="100%">`+"\n")
+	fmt.Fprint(&b, `    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>`+"\n")
+	fmt.Fprint(&b, `    <stop offset="1" stop-opacity=".1"/>`+"\n")
+	fmt.Fprint(&b, `  </linearGradient>`+"\n")
+	fmt.Fprintf(&b, `  <clipPath id="r"><rect width="%d" height="%d" rx="3" fill="#fff"/></clipPath>`+"\n",
+		total, height)
+	fmt.Fprint(&b, `  <g clip-path="url(#r)">`+"\n")
+	fmt.Fprintf(&b, `    <rect width="%d" height="%d" fill="#555"/>`+"\n", labelW, height)
+	fmt.Fprintf(&b, `    <rect x="%d" width="%d" height="%d" fill="%s"/>`+"\n",
+		labelW, msgW, height, Color(v.Level))
+	fmt.Fprintf(&b, `    <rect width="%d" height="%d" fill="url(#s)"/>`+"\n", total, height)
+	fmt.Fprint(&b, `  </g>`+"\n")
+	fmt.Fprint(&b, `  <g fill="#fff" text-anchor="middle" `+
+		`font-family="Verdana,Geneva,DejaVu Sans,sans-serif" `+
+		`text-rendering="geometricPrecision" font-size="110" transform="scale(.1)">`+"\n")
+	// Each string is drawn twice: once in near-black at 30% opacity one
+	// pixel lower (the emboss shields uses for contrast on mid-tone
+	// fills), then in white on top.
+	fmt.Fprintf(&b, `    <text aria-hidden="true" x="%d" y="150" fill="#010101" fill-opacity=".3">%s</text>`+"\n", labelX, esc(label))
+	fmt.Fprintf(&b, `    <text x="%d" y="140">%s</text>`+"\n", labelX, esc(label))
+	fmt.Fprintf(&b, `    <text aria-hidden="true" x="%d" y="150" fill="#010101" fill-opacity=".3">%s</text>`+"\n", msgX, esc(message))
+	fmt.Fprintf(&b, `    <text x="%d" y="140">%s</text>`+"\n", msgX, esc(message))
+	fmt.Fprint(&b, `  </g>`+"\n")
+	fmt.Fprint(&b, `</svg>`+"\n")
+	return b.Bytes()
+}
+
+// textWidth estimates the rendered width, in pixels, of s at 11px in
+// the badge's font stack.
+//
+// Measuring for real would mean shipping a font and a shaper; the badge
+// only needs enough accuracy that text never collides with the rounded
+// edge, so a per-character advance table is the right size of solution.
+// Widths are Verdana 11px advances, which is what the shields geometry
+// this markup copies was tuned against. Non-ASCII falls back to a
+// slightly generous average so wide glyphs get more room, not less.
+func textWidth(s string) float64 {
+	var w float64
+	for _, r := range s {
+		switch {
+		case r >= ' ' && r <= '~':
+			w += asciiWidths[r-' ']
+		default:
+			w += 8.0
+		}
+	}
+	return w
+}
+
+// asciiWidths holds the 11px Verdana advance width of every printable
+// ASCII rune, indexed by (rune - ' ').
+var asciiWidths = [95]float64{
+	3.82, 4.27, 5.40, 9.90, 6.98, 11.20, 8.30, 3.10, // ' ' ! " # $ % & '
+	4.60, 4.60, 6.98, 9.90, 4.00, 4.60, 4.00, 5.20, // ( ) * + , - . /
+	6.98, 6.98, 6.98, 6.98, 6.98, 6.98, 6.98, 6.98, // 0-7
+	6.98, 6.98, 4.60, 4.60, 9.90, 9.90, 9.90, 5.90, // 8 9 : ; < = > ?
+	11.60, 7.90, 7.80, 7.90, 8.60, 7.10, 6.50, 8.70, // @ A B C D E F G
+	8.50, 4.60, 4.90, 8.00, 6.40, 9.70, 8.50, 8.90, // H I J K L M N O
+	6.90, 8.90, 7.90, 7.40, 6.80, 8.30, 7.90, 11.70, // P Q R S T U V W
+	7.90, 6.90, 7.40, 4.60, 5.20, 4.60, 9.90, 6.98, // X Y Z [ \ ] ^ _
+	6.98, 6.60, 6.90, 5.60, 6.90, 6.50, 4.20, 6.90, // ` a b c d e f g
+	6.90, 3.10, 3.10, 6.30, 3.10, 10.50, 6.90, 6.60, // h i j k l m n o
+	6.90, 6.90, 4.70, 5.60, 4.30, 6.90, 6.30, 9.00, // p q r s t u v w
+	6.30, 6.30, 5.60, 6.98, 4.30, 6.98, 9.90, // x y z { | } ~
+}
