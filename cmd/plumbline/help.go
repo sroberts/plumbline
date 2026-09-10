@@ -319,13 +319,15 @@ stopped being true.
 plumbline ships an action.yml, so a consumer repo can skip the install
 steps entirely:
 
-  - uses: sroberts/plumbline@v0.3.1
+  - uses: sroberts/plumbline@v1
     with:
       fail-below: '3'
       badge: .plumbline-badge.svg
 
-Pin an exact tag rather than a moving major: plumbline is pre-1.0, and a
-tool upgrade can legitimately move a verdict.
+'v1' is a moving major tag tracking the newest 1.x release, so you pick up
+fixes without editing the workflow. Pin an exact release ('@v1.0.1') when
+you need verdict-for-verdict reproducibility: a plumbline upgrade can
+legitimately move a level.
 
 Outputs: level, level-name, next-gap. The gate step runs last, so a
 failing gate still leaves the badge and job summary behind — which is
