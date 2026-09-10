@@ -178,11 +178,15 @@ A drifted badge then shows up as a reviewable change in the PR that caused it, r
 plumbline ships an [`action.yml`](action.yml), so a consumer repo can skip the install steps:
 
 ```yaml
-- uses: sroberts/plumbline@v1
+- uses: sroberts/plumbline@v0.3.0
   with:
     fail-below: '3'
     badge: .plumbline-badge.svg
 ```
+
+Pin an exact tag rather than a moving major. plumbline is pre-1.0, and a
+tool upgrade can legitimately move a verdict — an unpinned action would
+let that happen on a run you didn't trigger.
 
 Inputs: `path`, `version`, `go-version`, `fail-below`, `badge`, `badge-label`, `badge-drift-check`, `snapshot`, `summary`. Outputs: `level`, `level-name`, `next-gap`. The gate step runs **last**, so a failing gate still leaves the badge and job summary behind — which is the run where you most want them.
 
