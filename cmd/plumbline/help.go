@@ -206,6 +206,24 @@ Cheap CI deltas: the base verdict is already committed as .plumbline.toon, so a
 "how did this PR move maturity?" comment scans only the head and diffs against
 'git show <base>:.plumbline.toon' — no second full assess.
 
+## Status badge ('plumbline badge')
+'plumbline badge' renders the verdict as a self-contained SVG for the README:
+
+  plumbline badge                         # writes .plumbline-badge.svg
+  plumbline badge --label "AI readiness"  # rename the left-hand side
+  plumbline badge --out -                 # stream the SVG instead
+  plumbline badge --from .plumbline.toon  # render from a snapshot, no rescan
+
+Reference it with a relative path:
+
+  ![ACMM level](.plumbline-badge.svg)
+
+Self-hosted rather than a shields.io endpoint: plumbline makes no network calls,
+and a committed SVG keeps that true for the reader — it renders in private repos,
+behind a proxy, and offline. Byte-stable for an unchanged verdict, like the
+snapshot, so CI can regenerate and fail on a diff. 'plumbline install-ci' writes
+that gate for you; see 'plumbline help ci'.
+
 ## NDJSON event stream ('--events ndjson')
 One JSON object per line emitted to stderr while the scan runs. Schema: 'plumbline schema event'.
 
@@ -366,8 +384,12 @@ const helpFix = `# Applying Fixes
 plumbline can scaffold or extend a repo's L2 instruction artifacts —
 the files that turn an L1 "Assisted" repo into an L2 "Instructed" one.
 
-This is the **only** path through which plumbline writes inside the
-target repo (see SPEC.md §11). Everything else is read-only.
+'fix' is one of three commands that write inside the target repo —
+the others are 'install-skill' (an agent usage guide) and 'install-ci'
+(the workflow that runs plumbline). 'plumbline badge' also writes, but
+only its own generated SVG, at a path you name. Everything else is
+read-only. All three writers are dry-run by default, refuse to
+overwrite, and share the safety guarantees below (SPEC.md §11).
 
 ## Two ways to apply a fix
 
@@ -411,8 +433,17 @@ Currently the L2 catalog (file scaffolding):
 - l2.pr-template          scaffolds .github/pull_request_template.md
 - l2.commit-rules         scaffolds .gitmessage
 
-L3+ fixes (workflow scaffolding) are deferred — they need more design
-to handle the "merge into existing workflow" case safely.
+L3+ *signal* fixes stay advisory: no signal fixer writes a workflow
+file. Read the signal's fix_hint for the shape to build, and use
+'--debug' to tell a detector gap from a real one.
+
+The single exception is 'plumbline install-ci', which writes the one
+workflow that runs plumbline itself — not a coverage gate, nightly
+suite, or triage automation. SPEC.md §4 records why the boundary sits
+there, including the part that cuts against it: the generated workflow
+scores 'partial' on l3.build-lint-gate, so plumbline does credit a file
+plumbline wrote. That is never enough to climb a level, and it does not
+mean the repo gates its own build.
 
 ## When to NOT use fix
 
