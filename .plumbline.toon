@@ -11,7 +11,7 @@ signals[23]:
     id: l2.agent-instructions
     level: 2
     method: content-regex
-    notes[1]: CLAUDE.md has a heading and 102 non-blank lines (≥20)
+    notes[1]: CLAUDE.md has a heading and 108 non-blank lines (≥20)
     score: 1
     status: found
     title: Agent instructions present (CLAUDE.md / AGENTS.md / copilot-instructions / etc.)

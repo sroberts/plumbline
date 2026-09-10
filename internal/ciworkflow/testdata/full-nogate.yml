@@ -1,0 +1,50 @@
+# Managed by `plumbline install-ci`. Safe to edit by hand.
+#
+# plumbline assesses this repo against the AI Codebase Maturity Model
+# (ACMM) — which feedback loops exist on disk. Docs: plumbline help ci
+name: ACMM maturity
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  plumbline:
+    name: ACMM assessment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: install plumbline
+        run: go install github.com/sroberts/plumbline/cmd/plumbline@latest
+
+      - name: badge drift gate
+        # The committed badge is a claim about this repo; regenerate
+        # it and fail if the claim has gone stale. The badge is
+        # byte-stable for an unchanged verdict, so a clean repo
+        # produces no diff. To fix a failure: run `plumbline badge`
+        # and commit the result.
+        run: |
+          badge='.plumbline-badge.svg'
+          label='ACMM'
+          plumbline badge --label "$label" --out "$badge" .
+          # `git diff` only compares tracked files, so a badge that
+          # was generated but never committed would sail through the
+          # gate below and leave it green forever — a gate that
+          # verifies nothing. Check it is tracked first.
+          if ! git ls-files --error-unmatch -- "$badge" >/dev/null 2>&1; then
+            echo "::error::$badge is not committed — run 'plumbline badge' and commit the result"
+            exit 1
+          fi
+          if ! git diff --exit-code -- "$badge"; then
+            echo "::error::$badge is out of date — run 'plumbline badge' and commit the result"
+            exit 1
+          fi
