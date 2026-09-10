@@ -48,6 +48,12 @@ type RepoIndex struct {
 
 	fsys  fs.FS
 	cache map[string][]byte
+
+	// nestedRepos holds the prefixes of directories skipped because they
+	// are separate repositories. Read refuses paths under them, so a
+	// detector cannot reach into another repo by constructing a path the
+	// walk deliberately excluded.
+	nestedRepos []string
 }
 
 // Scan walks the repository at the given filesystem path and returns a
@@ -88,6 +94,20 @@ func ScanFS(fsys fs.FS, root string) (*RepoIndex, error) {
 			if _, skip := defaultIgnoredDirs[path.Base(p)]; skip {
 				return fs.SkipDir
 			}
+			// A directory carrying its own .git is a separate repository:
+			// a git worktree, a submodule, or a plain nested clone. Its
+			// files describe that repo's maturity, not this one's, and
+			// indexing them lets a signal cite a second copy of an
+			// artifact — which is how a local scan starts disagreeing with
+			// the one CI runs on a clean checkout.
+			//
+			// The name-based list above cannot catch this: a worktree
+			// marks itself with a .git *file* holding "gitdir: ...", not
+			// a .git directory. Stat covers both shapes.
+			if isNestedRepo(fsys, p) {
+				idx.nestedRepos = append(idx.nestedRepos, p+"/")
+				return fs.SkipDir
+			}
 			return nil
 		}
 
@@ -112,6 +132,16 @@ func ScanFS(fsys fs.FS, root string) (*RepoIndex, error) {
 	// Other CI systems are deferred (SPEC.md §6 CI-system scope).
 	idx.parseWorkflows()
 	return idx, nil
+}
+
+// isNestedRepo reports whether dir is the root of a repository other than
+// the one being scanned, by looking for a .git entry inside it. Both
+// shapes count: a .git directory (submodule or nested clone) and a .git
+// file (worktree). The scan root is never passed here — WalkDir returns
+// early on "." — so the repo under assessment cannot skip itself.
+func isNestedRepo(fsys fs.FS, dir string) bool {
+	_, err := fs.Stat(fsys, path.Join(dir, ".git"))
+	return err == nil
 }
 
 func (idx *RepoIndex) parseWorkflows() {
@@ -143,6 +173,15 @@ func (idx *RepoIndex) parseWorkflows() {
 func (idx *RepoIndex) Read(p string) ([]byte, error) {
 	if cached, ok := idx.cache[p]; ok {
 		return cached, nil
+	}
+	// Paths inside a nested repository are not part of this repo, so they
+	// read as absent rather than as an error of their own. Detectors
+	// already branch on fs.ErrNotExist for "artifact not here", which is
+	// exactly what this means.
+	for _, prefix := range idx.nestedRepos {
+		if strings.HasPrefix(p, prefix) {
+			return nil, &fs.PathError{Op: "open", Path: p, Err: fs.ErrNotExist}
+		}
 	}
 	f, err := idx.fsys.Open(p)
 	if err != nil {
