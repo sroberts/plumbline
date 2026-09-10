@@ -3,7 +3,10 @@ name: release
 on:
   push:
     tags:
-      - 'v*'
+      # Semver releases only. The moving 'v1' major tag also matches 'v*',
+      # and re-pointing it would otherwise run GoReleaser again and publish
+      # a junk release on every move.
+      - 'v*.*.*'
   pull_request:
     paths:
       - '.goreleaser.yml'
