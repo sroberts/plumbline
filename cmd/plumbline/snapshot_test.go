@@ -151,12 +151,58 @@ func TestSnapshot_ReproducibleIsByteStable(t *testing.T) {
 	if !strings.Contains(string(a), `scanned_at: "1970-01-01T00:00:00Z"`) {
 		t.Errorf("expected normalized scanned_at sentinel, got:\n%s", a)
 	}
-	// repo is the base name, not the absolute temp path.
+	// repo is the sentinel — neither the absolute temp path nor its base
+	// name, both of which vary by checkout. See
+	// TestSnapshot_ReproducibleRepoIsPathIndependent for why.
 	if strings.Contains(string(a), "repo: "+dir) {
-		t.Errorf("expected repo normalized to base name, got absolute path:\n%s", a)
+		t.Errorf("expected repo normalized to the sentinel, got absolute path:\n%s", a)
 	}
-	if !strings.Contains(string(a), "repo: "+filepath.Base(dir)) {
-		t.Errorf("expected repo = base name %q, got:\n%s", filepath.Base(dir), a)
+	if strings.Contains(string(a), "repo: "+filepath.Base(dir)) {
+		t.Errorf("expected repo normalized to the sentinel, got base name %q:\n%s", filepath.Base(dir), a)
+	}
+	if !strings.Contains(string(a), "\nrepo: .\n") {
+		t.Errorf("expected a %q repo sentinel line, got:\n%s", ".", a)
+	}
+}
+
+// The drift gate compares an artifact committed from one checkout against
+// one regenerated in another, and those checkouts do not share a directory
+// name: git worktrees are named per-branch, forks get cloned under whatever
+// the user typed, and CI checks out under the runner's own layout. Basename
+// normalization is stable across checkout *paths* but not across checkout
+// *names*, so a reproducible snapshot must not carry the directory name at
+// all — identical repos in differently-named directories must produce
+// byte-identical artifacts.
+func TestSnapshot_ReproducibleRepoIsPathIndependent(t *testing.T) {
+	root := t.TempDir()
+
+	// Two identical repos whose only difference is the directory name —
+	// mirroring "plumbline" vs a "plumbline-e77155" worktree.
+	mk := func(name string) string {
+		dir := filepath.Join(root, name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, dir, "README.md", "# r\n")
+		out := filepath.Join(dir, "snap.toon")
+		if code, _, errOut := runCLI(t, "snapshot", "--out", out, dir); code != exitOK {
+			t.Fatalf("snapshot %s exit = %d (stderr: %s)", name, code, errOut)
+		}
+		body, err := os.ReadFile(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(body)
+	}
+
+	a := mk("plumbline")
+	b := mk("plumbline-e77155")
+
+	if a != b {
+		t.Errorf("reproducible snapshots of identically-shaped repos differ by directory name:\n--- plumbline ---\n%s\n--- plumbline-e77155 ---\n%s", a, b)
+	}
+	if strings.Contains(a, "plumbline-e77155") {
+		t.Errorf("artifact leaked the checkout directory name:\n%s", a)
 	}
 }
 

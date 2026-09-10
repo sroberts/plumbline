@@ -28,6 +28,18 @@ type snapshotFlags struct {
 // — the precondition for a CI drift gate (SPEC.md §9).
 const reproducibleScannedAt = "1970-01-01T00:00:00Z"
 
+// reproducibleRepo is the sentinel written into a reproducible snapshot in
+// place of the scanned path. Basename normalization was not enough: the
+// drift gate compares an artifact committed from one checkout against one
+// regenerated in another, and those checkouts do not share a directory
+// name — git worktrees are named per-branch, forks are cloned under
+// whatever the user typed, and CI checks out under the runner's layout.
+// Any of those produced a spurious diff that had nothing to do with the
+// codebase's maturity. "." is honest for a committed artifact: the repo is
+// the one the file lives in. --reproducible=false still embeds the real
+// absolute path.
+const reproducibleRepo = "."
+
 // newSnapshotCmd builds the `snapshot` subcommand. It runs the standard
 // assess pipeline and writes a committable maturity-state artifact —
 // `.plumbline.toon` by default (Token-Oriented Object Notation), or JSON
@@ -53,8 +65,9 @@ notation-independent values. Signals disabled in .plumbline.yml are
 honored, exactly as in a normal assess.
 
 By default the artifact is *reproducible*: the volatile scanned_at and
-repo fields are normalized to stable values so re-running snapshot on an
-unchanged repo produces a byte-identical file. That makes it safe to
+repo fields are normalized to fixed sentinels ("1970-01-01T00:00:00Z"
+and ".") so re-running snapshot on an unchanged repo produces a
+byte-identical file — from any checkout, including a git worktree. That makes it safe to
 commit and to guard with a CI drift gate (regenerate, then
 'git diff --exit-code .plumbline.toon'). Pass --reproducible=false to
 embed the live scan time and absolute path instead — useful when
@@ -90,7 +103,7 @@ See also:
 	fs.StringVar(&flags.outPath, "out", "", "Output path. Default: .plumbline.<ext>. \"-\" = stdout.")
 	fs.StringVar(&flags.configPath, "config", "", "Override config path. Default: .plumbline.yml.")
 	fs.StringVar(&flags.minConfidence, "min-confidence", "low", "Minimum confidence to credit a signal: low|medium|high.")
-	fs.BoolVar(&flags.reproducible, "reproducible", true, "Normalize volatile fields (scanned_at, repo) so the artifact is byte-stable and committable. --reproducible=false embeds the live scan time and path.")
+	fs.BoolVar(&flags.reproducible, "reproducible", true, "Normalize volatile fields (scanned_at, repo) to fixed sentinels so the artifact is byte-stable across checkouts and committable. --reproducible=false embeds the live scan time and path.")
 	return cmd
 }
 
@@ -145,12 +158,12 @@ func makeSnapshotRunE(flags *snapshotFlags, stdout, stderr io.Writer) func(*cobr
 		// Normalize the two fields that vary by *when and where* the scan
 		// ran rather than by the codebase's maturity, so a committed
 		// artifact diffs cleanly and only when the assessment actually
-		// changes. repo → base name (stable across checkout paths);
-		// scanned_at → fixed sentinel. tool_version / signal_set_version
-		// are left intact — they are intrinsic to how signals were scored.
+		// changes. Both become fixed sentinels; tool_version /
+		// signal_set_version are left intact, since they are intrinsic to
+		// how the signals were scored.
 		if flags.reproducible {
 			rpt.ScannedAt = reproducibleScannedAt
-			rpt.Repo = filepath.Base(rpt.Repo)
+			rpt.Repo = reproducibleRepo
 		}
 
 		// With no explicit --out, drop the dotfile inside the scanned repo
