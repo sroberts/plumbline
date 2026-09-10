@@ -148,7 +148,7 @@ If you customize the badge with `plumbline badge --label`, pass the same value t
 
 Omit `--fail-below` to install the measurement without the enforcement — worth doing first in a repo that isn't yet at the level it wants, since a gate that's red on the day it lands gets deleted rather than fixed.
 
-**Scope note.** This is the only workflow plumbline will ever generate: the one that runs plumbline. It writes no coverage gate, no nightly suite, no triage automation — those stay advisory (`fix_hint`), for the reasons in [SPEC.md §4](SPEC.md). The generated workflow *is* detected, at partial credit on `l3.build-lint-gate`, which is plumbline crediting a file plumbline wrote; a test pins the bound that this can never be enough to climb a level on its own.
+**Scope note.** This is the only workflow plumbline will ever generate: the one that runs plumbline. It writes no coverage gate, no nightly suite, no triage automation — those stay advisory (`fix_hint`), for the reasons in [SPEC.md §4](SPEC.md). The generated workflow earns the repo **no** credit: `l3.build-lint-gate` deliberately ignores it, so plumbline never scores a repo for a file plumbline wrote. A test pins that.
 
 ### Status badge
 
