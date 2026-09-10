@@ -101,6 +101,51 @@ but the skill body in `internal/skill/skill.go` hand-lists every signal ID,
 and `TestSkillBodyListsEverySignal` fails if you forget it. That test
 exists because `l3.metrics-acted-on` shipped missing from the list.
 
+## Releasing
+
+`action.yml` is published to the GitHub Actions Marketplace, which serves
+the listing **from a release**. That makes the order below load-bearing
+rather than a style preference: getting it wrong publishes a listing that
+contradicts itself, and a published tag cannot be edited.
+
+1. **Point the docs at the version you are about to cut**, and merge that
+   first. Three files reference the action and must agree:
+   `README.md`, `cmd/plumbline/help.go` (the `ci` topic), and `action.yml`'s
+   own header comment. Cutting the tag first bakes stale references into
+   the release, so the Marketplace page ends up telling readers to pin a
+   different version than the one they are reading. That shipped once
+   already: **v1.0.0 tells readers to pin `@v0.3.1`**, because the tag was
+   cut from a commit whose docs had not been updated yet. Released tags are
+   immutable, so it cannot be fixed after the fact — only avoided.
+
+   The related trap is referencing a tag that does not exist at all. `main`
+   advertised `@v1` for several commits before any v1 was tagged, so anyone
+   copying the README in that window got a workflow that could not resolve
+   the action.
+2. **Tag the semver release** (`git tag -a v1.0.2 -m ... && git push origin v1.0.2`).
+   `release.yml` runs GoReleaser and publishes four binaries plus
+   `checksums.txt`.
+3. **Move the major tag** so `uses: sroberts/plumbline@v1` picks it up:
+
+   ```bash
+   git tag -f v1 v1.0.2 && git push -f origin v1
+   ```
+
+   The force-push is expected. `v1` is a *moving* tag — re-pointing it is
+   how consumers on `@v1` receive the release, the same contract as
+   `actions/checkout@v4`. This is the one place in this repo where
+   force-pushing a ref is correct.
+
+**`release.yml` triggers on `v*.*.*`, never `v*`.** The moving `v1` tag
+matches `v*`, so the broader glob would run GoReleaser on every re-point
+and publish a junk `v1` release over the real ones. If you add another
+moving tag (`v2`), it stays silent for the same reason. Verify after
+moving a major tag that no new release run appeared.
+
+Docs pin `@v1`, not an exact release, so a patch release needs no doc
+change — only a major bump does, and then all three references move
+together.
+
 ## What Plumbline is
 
 A standalone Go CLI that performs a **repo-level AI coding readiness assessment** based on the **AI Codebase Maturity Model (ACMM)** from `the_ai_codebase_maturity_model.md`. Given a target repository path, it detects which feedback-loop artifacts are present and reports the codebase's ACMM level.
