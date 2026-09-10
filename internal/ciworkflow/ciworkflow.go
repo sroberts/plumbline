@@ -16,6 +16,7 @@ package ciworkflow
 import (
 	"bytes"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/sroberts/plumbline/pkg/acmm"
@@ -142,7 +143,37 @@ func (o Options) validate() error {
 	if o.FailBelow != 0 && (o.FailBelow < 2 || o.FailBelow > 5) {
 		return fmt.Errorf("--fail-below %d out of range (want 0 for no gate, or 2-5)", o.FailBelow)
 	}
+	// The badge path is interpolated into the rendered shell script. It
+	// is a path inside the repo, so anything that could not be one is a
+	// mistake worth catching here rather than in a broken workflow.
+	bp := o.badgePath()
+	if strings.ContainsAny(bp, "\n\r") {
+		return fmt.Errorf("--badge %q: path may not contain newlines", bp)
+	}
+	if filepath.IsAbs(bp) {
+		return fmt.Errorf("--badge %q: must be relative to the repo root", bp)
+	}
 	return nil
+}
+
+// wantsGate reports whether the rendered workflow will contain a gate
+// step. A gate needs both a variant that has one and a floor to enforce.
+func (o Options) wantsGate() bool {
+	v := o.variant()
+	return (v == VariantGate || v == VariantFull) && o.FailBelow > 0
+}
+
+// wantsBadge reports whether the rendered workflow will contain the
+// badge drift-gate step.
+func (o Options) wantsBadge() bool {
+	v := o.variant()
+	return v == VariantBadge || v == VariantFull
+}
+
+// shellSingleQuote renders s as a POSIX single-quoted word, safe to
+// splice into the generated `run:` script.
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
 // Render returns the workflow YAML for the given options. Output is
@@ -152,9 +183,8 @@ func Render(opts Options) (string, error) {
 	if err := opts.validate(); err != nil {
 		return "", err
 	}
-	v := opts.variant()
-	wantGate := (v == VariantGate || v == VariantFull) && opts.FailBelow > 0
-	wantBadge := v == VariantBadge || v == VariantFull
+	wantGate := opts.wantsGate()
+	wantBadge := opts.wantsBadge()
 
 	var b bytes.Buffer
 	b.WriteString("# Managed by `plumbline install-ci`. Safe to edit by hand.\n")
@@ -188,7 +218,10 @@ func Render(opts Options) (string, error) {
 	}
 
 	if wantBadge {
-		badge := opts.badgePath()
+		// Bind the path to a shell variable once. Splicing it into every
+		// command instead would repeat it four times and, in the
+		// double-quoted echo lines, let a quote in the path break out of
+		// the string.
 		b.WriteString("\n      - name: badge drift gate\n")
 		b.WriteString("        # The committed badge is a claim about this repo; regenerate\n")
 		b.WriteString("        # it and fail if the claim has gone stale. The badge is\n")
@@ -196,9 +229,18 @@ func Render(opts Options) (string, error) {
 		b.WriteString("        # produces no diff. To fix a failure: run `plumbline badge`\n")
 		b.WriteString("        # and commit the result.\n")
 		b.WriteString("        run: |\n")
-		fmt.Fprintf(&b, "          plumbline badge --out %s .\n", badge)
-		fmt.Fprintf(&b, "          if ! git diff --exit-code -- %s; then\n", badge)
-		fmt.Fprintf(&b, "            echo \"::error::%s is out of date — run 'plumbline badge' and commit the result\"\n", badge)
+		fmt.Fprintf(&b, "          badge=%s\n", shellSingleQuote(opts.badgePath()))
+		b.WriteString("          plumbline badge --out \"$badge\" .\n")
+		b.WriteString("          # `git diff` only compares tracked files, so a badge that\n")
+		b.WriteString("          # was generated but never committed would sail through the\n")
+		b.WriteString("          # gate below and leave it green forever — a gate that\n")
+		b.WriteString("          # verifies nothing. Check it is tracked first.\n")
+		b.WriteString("          if ! git ls-files --error-unmatch -- \"$badge\" >/dev/null 2>&1; then\n")
+		b.WriteString("            echo \"::error::$badge is not committed — run 'plumbline badge' and commit the result\"\n")
+		b.WriteString("            exit 1\n")
+		b.WriteString("          fi\n")
+		b.WriteString("          if ! git diff --exit-code -- \"$badge\"; then\n")
+		b.WriteString("            echo \"::error::$badge is out of date — run 'plumbline badge' and commit the result\"\n")
 		b.WriteString("            exit 1\n")
 		b.WriteString("          fi\n")
 	}
@@ -229,8 +271,14 @@ func NewPlan(opts Options) (acmm.FixPlan, error) {
 	// into one — lowercasing it to fit mangled "README" into "readme".
 	summary := fmt.Sprintf("Install the %q GitHub Actions workflow at %s. %s",
 		v.ID, opts.path(), v.Desc)
-	if opts.FailBelow > 0 {
+	// Only claim a gate floor the rendered workflow actually enforces:
+	// the badge variant has no gate step, so --fail-below is inert there
+	// and saying otherwise would make the preview lie.
+	if opts.wantsGate() {
 		summary += fmt.Sprintf(" Gate floor: L%d.", opts.FailBelow)
+	} else if opts.FailBelow > 0 {
+		summary += fmt.Sprintf(" Note: --fail-below %d is ignored by the %q variant, which installs no gate step.",
+			opts.FailBelow, v.ID)
 	}
 
 	return acmm.FixPlan{

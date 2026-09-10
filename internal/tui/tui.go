@@ -547,8 +547,17 @@ func (m *model) renderCIVariants() string {
 	b.WriteString(strings.Repeat("─", min(60, m.viewWidth())))
 	b.WriteString("\n")
 
+	// The badge variant renders no gate step, so a floor shown against it
+	// would be a promise the installed workflow does not keep.
+	variants := ciworkflow.Variants()
+	gated := m.ciCursor < 0 || m.ciCursor >= len(variants) ||
+		variants[m.ciCursor].ID != ciworkflow.VariantBadge
+
 	gate := styleNA.Render("none (report only)")
-	if m.ciFailBelow > 0 {
+	switch {
+	case !gated:
+		gate = styleNA.Render("n/a — the badge variant installs no gate")
+	case m.ciFailBelow > 0:
 		gate = styleHeader.Render(fmt.Sprintf("fail below L%d", m.ciFailBelow))
 	}
 	b.WriteString(fmt.Sprintf("Gate:  %s\n", gate))
@@ -556,7 +565,7 @@ func (m *model) renderCIVariants() string {
 	b.WriteString(m.renderHint("[f] cycle gate floor"))
 	b.WriteString("\n\n")
 
-	for i, v := range ciworkflow.Variants() {
+	for i, v := range variants {
 		line := fmt.Sprintf("  %-7s %-18s %s", v.ID, v.Name, v.Desc)
 		if i == m.ciCursor {
 			line = styleSelected.Render(line)

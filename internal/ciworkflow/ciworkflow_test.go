@@ -90,6 +90,69 @@ func TestRender_VariantContent(t *testing.T) {
 	}
 }
 
+// TestRender_BadgeGateChecksTrackedness is a regression test. The first
+// version of this gate used `git diff --exit-code` alone, which compares
+// only *tracked* files — so a repo that generated a badge but never
+// committed it got a permanently green gate that verified nothing. That
+// is the dashboard-graveyard shape plumbline exists to flag, shipped in
+// plumbline's own generated workflow.
+func TestRender_BadgeGateChecksTrackedness(t *testing.T) {
+	body, err := Render(Options{Variant: VariantBadge})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(body, "git ls-files --error-unmatch") {
+		t.Errorf("badge gate does not verify the badge is tracked, so an "+
+			"uncommitted badge would pass it forever:\n%s", body)
+	}
+	if !strings.Contains(body, "is not committed") {
+		t.Errorf("badge gate has no distinct error for an uncommitted badge:\n%s", body)
+	}
+}
+
+// TestRender_BadgePathIsShellQuoted keeps a path with a space or a quote
+// from rewriting the generated script.
+func TestRender_BadgePathIsShellQuoted(t *testing.T) {
+	body, err := Render(Options{Variant: VariantBadge, BadgePath: `my "odd" badge.svg`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(body, `badge='my "odd" badge.svg'`) {
+		t.Errorf("badge path is not single-quoted into the script:\n%s", body)
+	}
+	// The path must reach the commands only through the variable, so a
+	// quote in it can never terminate a string.
+	if strings.Contains(body, `--out my "odd" badge.svg`) {
+		t.Errorf("badge path spliced raw into a command:\n%s", body)
+	}
+}
+
+// TestRender_RejectsUnusablePaths — an absolute or multi-line badge path
+// cannot be a repo-relative artifact, and would render a broken gate.
+func TestRender_RejectsUnusablePaths(t *testing.T) {
+	for _, bad := range []string{"/etc/badge.svg", "a\nb.svg"} {
+		if _, err := Render(Options{Variant: VariantBadge, BadgePath: bad}); err == nil {
+			t.Errorf("badge path %q should be rejected", bad)
+		}
+	}
+}
+
+// TestNewPlan_DoesNotPromiseAGateItWillNotInstall — the badge variant
+// renders no gate step, so a summary claiming a floor would make the
+// dry-run preview lie about what is being written.
+func TestNewPlan_DoesNotPromiseAGateItWillNotInstall(t *testing.T) {
+	plan, err := NewPlan(Options{Variant: VariantBadge, FailBelow: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(plan.Summary, "Gate floor: L3") {
+		t.Errorf("summary promises a gate the badge variant does not install: %q", plan.Summary)
+	}
+	if !strings.Contains(plan.Summary, "ignored") {
+		t.Errorf("summary should say --fail-below is inert for this variant: %q", plan.Summary)
+	}
+}
+
 // TestRender_FailBelowZeroOmitsGate — a repo not yet at the level it
 // wants still benefits from the badge; forcing a gate would make the
 // first install red and get the workflow deleted.

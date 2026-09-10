@@ -89,24 +89,32 @@ runs:
 
     - name: Install plumbline
       shell: bash
+      env:
+        # Inputs go through the environment rather than being spliced
+        # into the script body: `${{ }}` interpolation happens before
+        # bash sees the line, so a value containing a quote or a `;`
+        # would rewrite the command rather than be an argument to it.
+        PL_VERSION: ${{ inputs.version }}
       run: |
         set -euo pipefail
-        if [ "${{ inputs.version }}" = "source" ]; then
+        if [ "$PL_VERSION" = "source" ]; then
           # Self-hosting: plumbline's own repo assesses itself with the
           # binary from the commit under test, not the last release —
           # otherwise the badge drift gate would compare a badge built
           # here against one generated locally by a different build.
           go install ./cmd/plumbline
         else
-          go install github.com/sroberts/plumbline/cmd/plumbline@${{ inputs.version }}
+          go install "github.com/sroberts/plumbline/cmd/plumbline@${PL_VERSION}"
         fi
 
     - name: Assess
       id: assess
       shell: bash
+      env:
+        PL_PATH: ${{ inputs.path }}
       run: |
         set -euo pipefail
-        plumbline assess --json --quiet "${{ inputs.path }}" > "${RUNNER_TEMP}/plumbline.json"
+        plumbline assess --json --quiet "$PL_PATH" > "${RUNNER_TEMP}/plumbline.json"
         level=$(jq -r '.verdict.level' "${RUNNER_TEMP}/plumbline.json")
         name=$(jq -r '.verdict.name' "${RUNNER_TEMP}/plumbline.json")
         gap=$(jq -r '.verdict.next_gap // [] | join(" ")' "${RUNNER_TEMP}/plumbline.json")
@@ -118,31 +126,51 @@ runs:
     - name: Snapshot
       if: inputs.snapshot != ''
       shell: bash
-      run: plumbline snapshot --out "${{ inputs.snapshot }}" "${{ inputs.path }}"
+      env:
+        PL_PATH: ${{ inputs.path }}
+        PL_SNAPSHOT: ${{ inputs.snapshot }}
+      run: plumbline snapshot --out "$PL_SNAPSHOT" "$PL_PATH"
 
     - name: Badge
       if: inputs.badge != ''
       shell: bash
+      env:
+        PL_PATH: ${{ inputs.path }}
+        PL_BADGE: ${{ inputs.badge }}
+        PL_BADGE_LABEL: ${{ inputs.badge-label }}
       run: |
-        plumbline badge --label "${{ inputs.badge-label }}" \
-          --out "${{ inputs.badge }}" "${{ inputs.path }}"
+        set -euo pipefail
+        plumbline badge --label "$PL_BADGE_LABEL" --out "$PL_BADGE" "$PL_PATH"
 
     - name: Badge drift gate
       if: inputs.badge != '' && inputs.badge-drift-check == 'true'
       shell: bash
+      env:
+        PL_BADGE: ${{ inputs.badge }}
       run: |
+        set -euo pipefail
         # The committed badge is a claim about this repo. The SVG is
         # byte-stable for an unchanged verdict, so an honest badge
         # produces no diff here.
-        if ! git diff --exit-code -- "${{ inputs.badge }}"; then
-          echo "::error::${{ inputs.badge }} is out of date — run 'plumbline badge' and commit the result"
+        #
+        # `git diff` only compares tracked files: a badge that was
+        # generated but never committed produces no diff either, which
+        # would leave this gate green forever. Check it is tracked first.
+        if ! git ls-files --error-unmatch -- "$PL_BADGE" >/dev/null 2>&1; then
+          echo "::error::${PL_BADGE} is not committed — run 'plumbline badge' and commit the result"
+          exit 1
+        fi
+        if ! git diff --exit-code -- "$PL_BADGE"; then
+          echo "::error::${PL_BADGE} is out of date — run 'plumbline badge' and commit the result"
           exit 1
         fi
 
     - name: Job summary
       if: inputs.summary == 'true'
       shell: bash
-      run: plumbline assess --report markdown --out - --quiet "${{ inputs.path }}" >> "$GITHUB_STEP_SUMMARY"
+      env:
+        PL_PATH: ${{ inputs.path }}
+      run: plumbline assess --report markdown --out - --quiet "$PL_PATH" >> "$GITHUB_STEP_SUMMARY"
 
     # The gate runs last on purpose: a failing gate should not prevent
     # the badge, snapshot, and summary above from being produced. The
@@ -150,4 +178,7 @@ runs:
     - name: ACMM gate
       if: inputs.fail-below != '0' && inputs.fail-below != ''
       shell: bash
-      run: plumbline assess --fail-below "${{ inputs.fail-below }}" --quiet "${{ inputs.path }}"
+      env:
+        PL_PATH: ${{ inputs.path }}
+        PL_FAIL_BELOW: ${{ inputs.fail-below }}
+      run: plumbline assess --fail-below "$PL_FAIL_BELOW" --quiet "$PL_PATH"

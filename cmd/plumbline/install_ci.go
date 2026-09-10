@@ -116,16 +116,18 @@ See also:
 
 			emitFixText(stdout, plan, res, root, !apply)
 
-			// The badge variants install a gate over a file that does not
-			// exist yet; the first CI run would fail on a missing badge
-			// rather than on real drift. Say so at install time.
+			// The badge variants gate a file that does not exist yet; the
+			// first CI run fails on the missing badge rather than on real
+			// drift. Say so at install time.
 			if apply && wantsBadge(variant) {
+				b := badgeOrDefault(badgePath)
 				fmt.Fprintf(stderr,
-					"Next: run 'plumbline badge --apply'-style generation and commit the badge:\n"+
-						"  plumbline badge\n"+
+					"Next: generate the badge and commit it, or the workflow's drift gate fails:\n"+
+						"  plumbline badge --out %s .\n"+
+						"  git add %s\n"+
 						"  # then reference it from README.md:\n"+
 						"  ![ACMM level](%s)\n",
-					badgeOrDefault(badgePath))
+					b, b, b)
 			}
 			return nil
 		},
