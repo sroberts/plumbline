@@ -1,6 +1,6 @@
 # Composite action: run plumbline's ACMM assessment in any repo.
 #
-#   - uses: sroberts/plumbline@v1
+#   - uses: sroberts/plumbline@v0.3.0
 #     with:
 #       fail-below: '3'
 #       badge: .plumbline-badge.svg
