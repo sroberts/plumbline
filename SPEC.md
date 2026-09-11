@@ -135,6 +135,16 @@ the catalog now says so.
 otherwise forbid. It clears the bar, but the reason has to be stated
 carefully, because the obvious version of it is only contingently true.
 
+First, what it is: **a utility that sits outside the assessment loop.**
+Every other remedy plumbline offers reaches the user through
+`assess` → `next_gap` → `fix` / `fix_hint`. This one does not appear
+there, and running it moves no verdict. That is a deliberate trade, not
+an oversight — the alternative was a dependency-automation signal, which
+§13 records as considered and declined. The cost is that a user driving
+plumbline as designed will not discover the command; it is reachable from
+`--help`, `plumbline help ci`, and the TUI's `[d]`, and nowhere in the
+assessment output.
+
 **Today, no signal detects the file.** `l4.self-modifying-config` looks
 for a workflow that opens pull requests back into the repo —
 `peter-evans/create-pull-request`, `git-auto-commit-action`, or a
@@ -1107,6 +1117,23 @@ The config schema lives in `internal/config` and is JSON-Schema-validated on loa
 - **Non-GitHub CI systems.** See §6 CI-system scope. MVP is GitHub Actions only; GitLab CI, Buildkite, CircleCI, and Jenkins are M4+ behind `--ci-system <name>`.
 - **Monorepo / per-workspace scoring.** Real users pointed at `kubernetes/kubernetes` or a Turborepo will want one verdict per workspace, not one for the whole tree. **Future shape (committed):** `plumbline assess --scope ./apps/web` runs the full assessor against a subtree and emits a single verdict for that scope; `--scope ./apps/*` fans out and emits one verdict per match. Until then, a single repo gets a single verdict.
 - **External signal plugins.** Out of MVP. **Future shape (committed):** plugins are subprocesses invoked as `<plugin> --repo <path> --json`; they emit one or more `signal-result` JSON objects on stdout (schema: `plumbline schema signal-result`). Plugins are declared in `.plumbline.yml plugins:` with a path and a SHA-256 attestation. Explicitly **not** Go's `buildmode=plugin` — it's deprecated in practice and tied to exact toolchain versions.
+- **A dependency-automation signal.** Considered when `install-dependabot`
+  landed, and declined. **Shape it would have taken:** an L4 signal scoring
+  the *closed* loop — dependency PRs that merge without a human — at `0.0`
+  when no auto-merge automation exists (so the config alone, which
+  plumbline can generate, earns nothing), `0.33` when auto-merge runs
+  ungated (autonomy without guardrails, the L4 anti-pattern), and `1.0`
+  when it is gated on CI. That is a real L4 topology and it would have
+  pulled `install-dependabot` inside the assessment loop.
+  **Why not:** it is not in the paper — Table 2 has no dependency-updating
+  artifact — so it would be plumbline asserting a maturity element the
+  model does not, on top of an already-deviating catalog. And it widens L4
+  from six signals to seven, which moves every repo's L4 average on
+  upgrade: this repo would fall from 0.833 to 0.714, still passing but
+  with almost no margin, and repos nearer the line would silently lose a
+  level. Dependency hygiene is worth having; it is not established as a
+  maturity level, and inventing one to justify a scaffolding command is
+  the wrong order of reasoning.
 - **Windows support.** See §11. Cross-platform is real work, not a `GOOS` flip.
 - **Internationalized file content.** UTF-16/UTF-32 files return `NA` for affected signals — see §11.
 

@@ -312,8 +312,11 @@ interface; an interactive Bubble Tea TUI is also available on terminals.
    ` + "`plumbline install-dependabot`" + ` is the companion: it writes
    ` + "`.github/dependabot.yml`" + ` with one update block per dependency
    manifest actually present, plus ` + "`github-actions`" + ` when the repo
-   has workflows. No signal detects it, so it moves no verdict — say so
-   rather than implying it raises a score.
+   has workflows. It sits **outside** the assessment loop: it is not in
+   ` + "`next_gap`" + `, no signal detects it, and it moves no verdict.
+   Offer it as dependency hygiene when a user asks about stale actions or
+   dependencies — never as a way to raise a level, and never imply
+   re-assessing will show a change.
 
    **This is the only workflow plumbline generates** — the one that runs
    plumbline. Do not expect it to scaffold a coverage gate, nightly

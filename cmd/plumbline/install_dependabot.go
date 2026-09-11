@@ -42,9 +42,17 @@ Default is dry-run; --apply is required to write. The file is created,
 never overwritten: an existing config encodes deliberate choices (ignores,
 groups, reviewers) that are not plumbline's to replace.
 
-Note on scoring: no signal in the catalog detects a Dependabot config, so
-running this changes no verdict. That is deliberate — plumbline does not
-credit repos for files plumbline wrote (SPEC.md §4).
+This command sits OUTSIDE the assessment loop, deliberately. plumbline's
+remedies normally reach you through assess -> next_gap -> fix/fix_hint;
+this one does not appear there, no signal detects the file it writes, and
+running it moves no verdict. It is dependency hygiene, which is worth
+having and is not a maturity level.
+
+Two reasons it stays outside. A signal that credited the config would be
+plumbline scoring a file plumbline wrote — the circularity SPEC.md §4
+exists to prevent. And the loop that would genuinely rate (updates
+merging without a human, gated on CI) is one this command does not
+write: it emits update blocks and a schedule, nothing that merges.
 
 Examples:
   # See what would be written for this repo.
