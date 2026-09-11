@@ -82,9 +82,10 @@ make lint       # gofmt + go vet (golangci-lint if installed)
   what a consumer repo's CI will start doing. This is the one artifact
   plumbline writes and never reads back, so review is the only feedback
   loop it has.
-- `.coverage-floor` — a one-way ratchet (currently 60). CI enforces it;
-  `coverage-ratchet.yml` raises it 1pp when coverage runs 3pp clear. Never
-  lower it to make a build pass.
+- `.coverage-floor` — a one-way ratchet; read the file for the current
+  value rather than trusting a number quoted elsewhere, since
+  `coverage-ratchet.yml` raises it 1pp every week that coverage runs 3pp
+  clear. CI enforces it. Never lower it to make a build pass.
 
 **Signal IDs are public API.** A rename needs a deprecation alias that
 rewrites and warns for at least one minor version (`internal/signals/aliases.go`).
