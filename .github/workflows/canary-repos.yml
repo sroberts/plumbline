@@ -55,7 +55,7 @@ jobs:
 
     steps:
       - name: check out plumbline (this repo)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: plumbline
 
@@ -70,7 +70,7 @@ jobs:
         run: go build -o /tmp/plumbline ./cmd/plumbline
 
       - name: shallow-clone canary
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ matrix.repo }}
           path: target
