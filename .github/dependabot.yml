@@ -16,3 +16,19 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    ignore:
+      # charmbracelet/x/exp/teatest is a nested module with no release
+      # tags of its own, so go.mod pins it at a pseudo-version and
+      # `go list -m -versions` returns nothing. Dependabot resolves the
+      # parent repo's tags instead, lands on a version that does not
+      # contain this package, and fails the whole go_modules job:
+      #
+      #   module github.com/charmbracelet/x@v0.1.0 found, but does not
+      #   contain package github.com/charmbracelet/x/exp/teatest
+      #
+      # Go resolves it fine and the build is unaffected — this is a
+      # Dependabot limitation, not a broken dependency. Ignored so a
+      # weekly red run stops being expected noise; the rest of the Go
+      # dependencies keep updating normally. Drop this once the module
+      # publishes its own tags.
+      - dependency-name: "github.com/charmbracelet/x/exp/teatest"
