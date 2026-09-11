@@ -66,7 +66,7 @@ jobs:
         # here with "GitHub Actions is not permitted to create or approve
         # pull requests" and reported nothing anyone saw.
         continue-on-error: true
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           commit-message: |
             chore(ci): ratchet coverage floor ${{ steps.cov.outputs.floor }} → ${{ steps.decide.outputs.new_floor }}
