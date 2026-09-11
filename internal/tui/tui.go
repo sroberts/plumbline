@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/sroberts/plumbline/internal/ciworkflow"
+	"github.com/sroberts/plumbline/internal/dependabot"
 	"github.com/sroberts/plumbline/internal/fix"
 	"github.com/sroberts/plumbline/internal/scanner"
 	"github.com/sroberts/plumbline/internal/signals"
@@ -205,6 +206,8 @@ func (m *model) updateResults(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.startInstallSkill()
 	case "w":
 		return m.startInstallCI()
+	case "d":
+		return m.startInstallDependabot()
 	}
 	return m, nil
 }
@@ -409,6 +412,10 @@ func (m *model) updateFixPreview(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.screen = screenCIVariants
 		case isSkillPlan(plan):
 			m.screen = screenSkillTargets
+		case isDependabotPlan(plan):
+			// Launched from the results footer, not from a signal, so
+			// there is no detail screen to go back to.
+			m.screen = screenResults
 		default:
 			m.screen = screenDetail
 		}
@@ -443,6 +450,11 @@ func isSkillPlan(p acmm.FixPlan) bool {
 	return strings.HasPrefix(p.SignalID, "install-skill:")
 }
 
+// isDependabotPlan reports whether the plan came from the [d] install.
+func isDependabotPlan(p acmm.FixPlan) bool {
+	return p.SignalID == "install-dependabot"
+}
+
 // isCIPlan reports whether the given FixPlan came from the install-ci
 // flow. The plan IDs are "install-ci:<variant>".
 func isCIPlan(p acmm.FixPlan) bool {
@@ -459,6 +471,40 @@ func ciWorkflowMissing(idx *scanner.RepoIndex) bool {
 	}
 	_, err := idx.Read(ciworkflow.DefaultPath)
 	return err != nil
+}
+
+// dependabotInstallable reports whether offering the Dependabot install
+// would do anything: the repo needs at least one dependency manifest and
+// must not already have a config, since the install is a create-file and
+// would only be refused.
+func dependabotInstallable(idx *scanner.RepoIndex) bool {
+	if idx == nil {
+		return false
+	}
+	if _, err := idx.Read(dependabot.DefaultPath); err == nil {
+		return false
+	}
+	return len(dependabot.Detect(idx)) > 0
+}
+
+// startInstallDependabot renders the config for this repo and goes
+// straight to the shared fix preview. There is no picker: unlike the CI
+// workflow there is only one artifact, and its content is derived from
+// the repo rather than chosen.
+func (m *model) startInstallDependabot() (tea.Model, tea.Cmd) {
+	if !dependabotInstallable(m.idx) {
+		return m, nil
+	}
+	plan, err := dependabot.NewPlan(dependabot.Detect(m.idx), dependabot.Options{})
+	if err != nil {
+		m.fixErr = err
+		m.screen = screenFixDone
+		return m, nil
+	}
+	m.fixer = nil
+	m.fixPlan = plan
+	m.screen = screenFixPreview
+	return m, nil
 }
 
 // ciGateFloors is the cycle the [f] key walks. 0 means "install the
@@ -720,6 +766,9 @@ func (m *model) renderResults() string {
 	}
 	if ciWorkflowMissing(m.idx) {
 		hint += "   [w] install CI"
+	}
+	if dependabotInstallable(m.idx) {
+		hint += "   [d] dependabot"
 	}
 	hint += "   [q] quit"
 	b.WriteString(m.renderHint(hint))

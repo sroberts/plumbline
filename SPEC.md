@@ -63,11 +63,12 @@ plumbline [global flags] <command> [args]
 | `plumbline fix <signal-id> [path]` | Scaffold the artifact a signal is looking for. **Dry-run by default**; `--apply` writes. `--input KEY=VALUE` (repeatable) supplies content the fix needs; unsupplied inputs get `TODO:`-marked placeholders. `--json` for a tool harness. Only some signals have fixers — see "Scaffolding scope" below. | no |
 | `plumbline badge [path]` | Render the verdict as a self-contained SVG status badge for the README. Writes `.plumbline-badge.svg` by default; `--out -` streams. `--label` sets the left-hand text; `--from <artifact>` renders from an existing snapshot instead of rescanning. | no |
 | `plumbline install-ci [path]` | Scaffold the GitHub Actions workflow that runs plumbline itself (`--variant full\|gate\|badge`, `--fail-below N`, `--out`). **Dry-run by default**; `--apply` writes. `--list` prints variants and exits. See "Scaffolding scope" below for why this is the *only* workflow plumbline will write. | picker |
+| `plumbline install-dependabot [path]` | Scaffold `.github/dependabot.yml` from the dependency manifests present in the repo (one update block per manifest, plus `github-actions` when workflows exist). **Dry-run by default**; `--apply` writes. `--interval daily\|weekly\|monthly`, `--list` prints what was detected. | action |
 | `plumbline install-skill [path]` | Write plumbline's own usage guide into the location a coding-agent tool expects (`--target claude\|cursor\|gemini\|codex\|opencode\|windsurf\|cline\|copilot`). **Dry-run by default**; `--apply` writes. `--global` installs under `$HOME` instead of the repo; `--list` prints targets and exits. | picker |
 | `plumbline help [topic]` | Long-form help on a topic (`signals`, `scoring`, `levels`, `output`, `config`, `ci`, `agents`, `profiles`). Output is plain markdown so an LLM agent can ingest it directly. | no |
 | `plumbline version` | Print build version + commit. Supports `--json`. | no |
 
-`fix`, `install-skill`, and `install-ci` are the only commands that write inside a target repo (§11). All three are dry-run by default and all three refuse to overwrite an existing file. `badge` also writes, and has to overwrite — regenerating in place is the whole workflow — so it draws the line differently: every badge carries a generated-file marker comment, and `badge` refuses any `--out` target that exists without one. `--out README.md` is a typo, not an instruction.
+`fix`, `install-skill`, `install-ci`, and `install-dependabot` are the only commands that write inside a target repo (§11). All four are dry-run by default and all four refuse to overwrite an existing file. `badge` also writes, and has to overwrite — regenerating in place is the whole workflow — so it draws the line differently: every badge carries a generated-file marker comment, and `badge` refuses any `--out` target that exists without one. `--out README.md` is a typo, not an instruction.
 
 ### Scaffolding scope
 
@@ -127,6 +128,85 @@ What the carve-out does **not** license: crediting a repo for gating its
 own build when all it gates is plumbline. A repo whose tests still do not
 run in CI is not a Measured codebase because it installed this file, and
 the catalog now says so.
+
+#### The second exception: `plumbline install-dependabot`
+
+`install-dependabot` also writes a file the scaffolding rule would
+otherwise forbid. It clears the bar, but the reason has to be stated
+carefully, because the obvious version of it is only contingently true.
+
+First, what it is: **a utility that sits outside the assessment loop.**
+Every other remedy plumbline offers reaches the user through
+`assess` → `next_gap` → `fix` / `fix_hint`. This one does not appear
+there, and running it moves no verdict. That is a deliberate trade, not
+an oversight — the alternative was a dependency-automation signal, which
+§13 records as considered and declined. The cost is that a user driving
+plumbline as designed will not discover the command; it is reachable from
+`--help`, `plumbline help ci`, and the TUI's `[d]`, and nowhere in the
+assessment output.
+
+**Today, no signal detects the file.** `l4.self-modifying-config` looks
+for a workflow that opens pull requests back into the repo —
+`peter-evans/create-pull-request`, `git-auto-commit-action`, or a
+`git commit` + `git push` pair in a step. A Dependabot config is none of
+those, so running the command moves no verdict, and reason 1 has nothing
+to bite on: plumbline is not grading its own homework when the homework
+is ungraded. `TestInstallDependabot_MovesNoVerdict` pins it.
+
+That fact is a property of the catalog as it stands, not of Dependabot.
+Left there, the argument would collapse silently the first time someone
+adds a dependency-automation signal. The durable form needs the model.
+
+**Where dependency updating actually sits in the ACMM.** The paper never
+mentions Dependabot, and its L4 "self-modifying configuration" is
+narrower than the phrase suggests: the worked example is
+`auto-qa-tuning.json`, *where categories with acceptance rates below 20%
+are automatically blocked* — a measurement → threshold → config-change
+loop in which the codebase observes **its own** outcomes and rewrites its
+own policy. Dependency updating is not that. Its input is upstream
+releases, which are external to the codebase.
+
+Since levels are assigned by loop topology rather than autonomy (§6),
+what matters is where the loop closes:
+
+| Setup | Topology | Shape |
+|---|---|---|
+| Dependabot alone | upstream → PR → **a human merges** | human in the path; weaker than L3, since the signal is not about this codebase |
+| Dependabot + auto-merge gated on CI | upstream → PR → CI gates → **merges itself** | genuinely L4 — closes without a human, guarded by the L3 measurement layer |
+
+The second row is a real L4 topology, and a textbook instance of the
+no-skip rule: auto-merging is only safe once the tests deciding it are
+trustworthy. Enabling it without CI gates builds the *autonomy without
+guardrails* anti-pattern directly, which is what `l4.measurement-backed`
+exists to catch.
+
+**So the boundary is drawn by what the scaffolder writes, not by what the
+catalog currently misses.** `install-dependabot` emits update blocks and
+a schedule — the *open* loop. It writes nothing that merges: no
+auto-merge workflow, no `gh pr merge`, no approval automation. If a
+dependency-automation signal is ever added it should detect the *closed*
+loop, which is the part plumbline does not generate. Generator and
+detector then stay disjoint by construction rather than by accident, and
+reason 1 holds no matter how the catalog grows.
+
+It also sets the right expectation for the command: it buys dependency
+*visibility*, which is hygiene, not a maturity level. Nothing about
+running it should be described as raising a score.
+
+Reason 3 (§2 rules out recommending specific tooling) is the remaining
+objection, since Renovate is the alternative. The answer is scope: the
+MVP is GitHub Actions only (§6), and inside a GitHub-only assessor
+GitHub's own updater is the platform default rather than a competitive
+pick — the same standing `actions/checkout` has in the generated
+workflow.
+
+The content is **derived, not templated**: one update block per manifest
+actually present, keyed by directory. A config naming an ecosystem whose
+manifest is absent makes Dependabot error on every run; one that omits a
+manifest silently never checks it. A repo with no manifests gets an error
+rather than an empty config, because a config with no update blocks reads
+as configured while doing nothing — strictly worse than no file, since it
+stops anyone noticing the gap.
 
 ### Global flags
 
@@ -1037,6 +1117,23 @@ The config schema lives in `internal/config` and is JSON-Schema-validated on loa
 - **Non-GitHub CI systems.** See §6 CI-system scope. MVP is GitHub Actions only; GitLab CI, Buildkite, CircleCI, and Jenkins are M4+ behind `--ci-system <name>`.
 - **Monorepo / per-workspace scoring.** Real users pointed at `kubernetes/kubernetes` or a Turborepo will want one verdict per workspace, not one for the whole tree. **Future shape (committed):** `plumbline assess --scope ./apps/web` runs the full assessor against a subtree and emits a single verdict for that scope; `--scope ./apps/*` fans out and emits one verdict per match. Until then, a single repo gets a single verdict.
 - **External signal plugins.** Out of MVP. **Future shape (committed):** plugins are subprocesses invoked as `<plugin> --repo <path> --json`; they emit one or more `signal-result` JSON objects on stdout (schema: `plumbline schema signal-result`). Plugins are declared in `.plumbline.yml plugins:` with a path and a SHA-256 attestation. Explicitly **not** Go's `buildmode=plugin` — it's deprecated in practice and tied to exact toolchain versions.
+- **A dependency-automation signal.** Considered when `install-dependabot`
+  landed, and declined. **Shape it would have taken:** an L4 signal scoring
+  the *closed* loop — dependency PRs that merge without a human — at `0.0`
+  when no auto-merge automation exists (so the config alone, which
+  plumbline can generate, earns nothing), `0.33` when auto-merge runs
+  ungated (autonomy without guardrails, the L4 anti-pattern), and `1.0`
+  when it is gated on CI. That is a real L4 topology and it would have
+  pulled `install-dependabot` inside the assessment loop.
+  **Why not:** it is not in the paper — Table 2 has no dependency-updating
+  artifact — so it would be plumbline asserting a maturity element the
+  model does not, on top of an already-deviating catalog. And it widens L4
+  from six signals to seven, which moves every repo's L4 average on
+  upgrade: this repo would fall from 0.833 to 0.714, still passing but
+  with almost no margin, and repos nearer the line would silently lose a
+  level. Dependency hygiene is worth having; it is not established as a
+  maturity level, and inventing one to justify a scaffolding command is
+  the wrong order of reasoning.
 - **Windows support.** See §11. Cross-platform is real work, not a `GOOS` flip.
 - **Internationalized file content.** UTF-16/UTF-32 files return `NA` for affected signals — see §11.
 

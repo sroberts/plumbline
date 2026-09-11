@@ -114,6 +114,7 @@ publish schemas, etc.). Run 'plumbline help' for topical guides.`,
 		newSchemaCmd(stdout, stderr),
 		newFixCmd(stdout, stderr),
 		newInstallCICmd(stdout, stderr),
+		newInstallDependabotCmd(stdout, stderr),
 		newInstallSkillCmd(stdout, stderr),
 		newVersionCmd(stdout),
 	)

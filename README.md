@@ -50,6 +50,11 @@ plumbline fix l2.agent-instructions --apply
 # Install a Claude Code skill so AI agents in your repo know how to drive plumbline.
 plumbline install-skill --apply
 
+# Scaffold .github/dependabot.yml from the manifests this repo actually has.
+# (A utility — it moves no verdict. See "Dependency hygiene" below.)
+plumbline install-dependabot --list     # what would it cover?
+plumbline install-dependabot --apply
+
 # Render the README status badge (self-contained SVG, no third-party service).
 plumbline badge
 
@@ -108,6 +113,7 @@ Schemas are published via `plumbline schema {verdict, signal-result, event, conf
 | `enter` | Open the detail screen for the selected signal |
 | `a` | Apply the signal's fix (only on signals marked `✚`) |
 | `r` | Re-run the scan in place |
+| `d` | Scaffold `.github/dependabot.yml` from the repo's manifests |
 | `i` | Install plumbline's usage guide for a coding-agent tool (target picker) |
 | `w` | Install the GitHub Actions workflow that runs plumbline (variant picker) |
 | `esc` | Back |
@@ -117,7 +123,7 @@ In the fix flow: `tab`/`shift+tab` between input fields, `enter` advances, `y`/`
 
 ## Apply fixes (safety)
 
-`plumbline fix`, `plumbline install-skill`, and `plumbline install-ci` are the only paths through which plumbline writes inside the target repo (`plumbline badge` also writes, but only its own SVG, at a path you name). Defaults are conservative:
+`plumbline fix`, `plumbline install-skill`, `plumbline install-ci`, and `plumbline install-dependabot` are the only paths through which plumbline writes inside the target repo (`plumbline badge` also writes, but only its own SVG, at a path you name). Defaults are conservative:
 
 - Dry-run by default; `--apply` is required to actually write.
 - `create-file` refuses to overwrite an existing file.
@@ -212,6 +218,23 @@ jobs:
 ```
 
 `--signal-set v1` pins the rule-set version so the gate can't silently flip when plumbline upgrades. `plumbline help compatibility` documents what each version contains.
+
+### Dependency hygiene (outside the assessment)
+
+`plumbline install-dependabot` writes `.github/dependabot.yml` from the manifests your repo actually has — one update block per manifest, plus `github-actions` whenever you have workflows:
+
+```bash
+plumbline install-dependabot --list    # what would it cover?
+plumbline install-dependabot --apply
+```
+
+Pinned action versions are the case most repos miss. They rot like any dependency but have no manifest to hint at it, so a runtime deprecation takes every workflow out at once.
+
+**This command sits outside the assessment loop, deliberately.** Every other remedy plumbline offers reaches you through `assess` → `next_gap` → `fix`/`fix_hint`. This one doesn't appear there, no signal detects the file, and running it moves no verdict.
+
+Two reasons. A signal crediting the config would be plumbline scoring a file plumbline wrote — the circularity [SPEC.md §4](SPEC.md) exists to prevent. And the loop that *would* genuinely rate — updates merging without a human, gated on CI — is one this command doesn't write; it emits update blocks and a schedule, nothing that merges. Adding that signal was considered and declined; [SPEC.md §13](SPEC.md) records the shape it would have taken and why not.
+
+So: dependency hygiene is worth having. It isn't a maturity level, and plumbline won't tell you it is.
 
 ### Track maturity over time (snapshot drift gate)
 
