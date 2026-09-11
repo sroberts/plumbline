@@ -1,0 +1,18 @@
+# Managed by `plumbline install-dependabot`. Safe to edit by hand.
+#
+# One block per dependency manifest found in this repo. Adding an
+# ecosystem whose manifest is absent makes Dependabot error on every
+# run; omitting one present means it is never checked.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: weekly
+    # Action versions go stale like any dependency, and a runtime
+    # deprecation takes every workflow out at once — with no
+    # manifest anywhere to warn you first.
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: weekly
