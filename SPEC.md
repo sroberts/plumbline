@@ -63,11 +63,12 @@ plumbline [global flags] <command> [args]
 | `plumbline fix <signal-id> [path]` | Scaffold the artifact a signal is looking for. **Dry-run by default**; `--apply` writes. `--input KEY=VALUE` (repeatable) supplies content the fix needs; unsupplied inputs get `TODO:`-marked placeholders. `--json` for a tool harness. Only some signals have fixers — see "Scaffolding scope" below. | no |
 | `plumbline badge [path]` | Render the verdict as a self-contained SVG status badge for the README. Writes `.plumbline-badge.svg` by default; `--out -` streams. `--label` sets the left-hand text; `--from <artifact>` renders from an existing snapshot instead of rescanning. | no |
 | `plumbline install-ci [path]` | Scaffold the GitHub Actions workflow that runs plumbline itself (`--variant full\|gate\|badge`, `--fail-below N`, `--out`). **Dry-run by default**; `--apply` writes. `--list` prints variants and exits. See "Scaffolding scope" below for why this is the *only* workflow plumbline will write. | picker |
+| `plumbline install-dependabot [path]` | Scaffold `.github/dependabot.yml` from the dependency manifests present in the repo (one update block per manifest, plus `github-actions` when workflows exist). **Dry-run by default**; `--apply` writes. `--interval daily\|weekly\|monthly`, `--list` prints what was detected. | action |
 | `plumbline install-skill [path]` | Write plumbline's own usage guide into the location a coding-agent tool expects (`--target claude\|cursor\|gemini\|codex\|opencode\|windsurf\|cline\|copilot`). **Dry-run by default**; `--apply` writes. `--global` installs under `$HOME` instead of the repo; `--list` prints targets and exits. | picker |
 | `plumbline help [topic]` | Long-form help on a topic (`signals`, `scoring`, `levels`, `output`, `config`, `ci`, `agents`, `profiles`). Output is plain markdown so an LLM agent can ingest it directly. | no |
 | `plumbline version` | Print build version + commit. Supports `--json`. | no |
 
-`fix`, `install-skill`, and `install-ci` are the only commands that write inside a target repo (§11). All three are dry-run by default and all three refuse to overwrite an existing file. `badge` also writes, and has to overwrite — regenerating in place is the whole workflow — so it draws the line differently: every badge carries a generated-file marker comment, and `badge` refuses any `--out` target that exists without one. `--out README.md` is a typo, not an instruction.
+`fix`, `install-skill`, `install-ci`, and `install-dependabot` are the only commands that write inside a target repo (§11). All four are dry-run by default and all four refuse to overwrite an existing file. `badge` also writes, and has to overwrite — regenerating in place is the whole workflow — so it draws the line differently: every badge carries a generated-file marker comment, and `badge` refuses any `--out` target that exists without one. `--out README.md` is a typo, not an instruction.
 
 ### Scaffolding scope
 
@@ -127,6 +128,37 @@ What the carve-out does **not** license: crediting a repo for gating its
 own build when all it gates is plumbline. A repo whose tests still do not
 run in CI is not a Measured codebase because it installed this file, and
 the catalog now says so.
+
+#### The second exception: `plumbline install-dependabot`
+
+`install-dependabot` also writes a file the scaffolding rule would
+otherwise forbid, but it clears the bar for a different and simpler
+reason than `install-ci` does: **no signal detects it.**
+
+`l4.self-modifying-config` looks for a workflow that opens pull requests
+back into the repo — `peter-evans/create-pull-request`,
+`git-auto-commit-action`, or a `git commit` + `git push` pair in a step.
+A Dependabot config is none of those. So running this command improves a
+repo without moving its verdict by a single point, and reason 1 has
+nothing to bite on: plumbline cannot be accused of grading its own
+homework when the homework is ungraded.
+`TestInstallDependabot_MovesNoVerdict` pins that, and will fail if a
+future signal starts crediting the file.
+
+Reason 3 (§2 rules out recommending specific tooling) is the one that
+needs an answer. Dependabot is one option and Renovate is the other. The
+answer is scope: the MVP is GitHub Actions only (§6), and within a
+GitHub-only assessor, GitHub's own dependency updater is the platform
+default rather than a competitive pick — the same standing
+`actions/checkout` has in the generated workflow.
+
+The content is **derived, not templated**: one update block per manifest
+actually present, keyed by directory. A config naming an ecosystem whose
+manifest is absent makes Dependabot error on every run; one that omits a
+manifest silently never checks it. A repo with no manifests gets an error
+rather than an empty config, because a config with no update blocks reads
+as configured while doing nothing — strictly worse than no file, since it
+stops anyone noticing the gap.
 
 ### Global flags
 

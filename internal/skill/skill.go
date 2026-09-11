@@ -309,6 +309,12 @@ interface; an interactive Bubble Tea TUI is also available on terminals.
    byte-stable for an unchanged verdict, so CI can regenerate and fail on
    a diff.
 
+   ` + "`plumbline install-dependabot`" + ` is the companion: it writes
+   ` + "`.github/dependabot.yml`" + ` with one update block per dependency
+   manifest actually present, plus ` + "`github-actions`" + ` when the repo
+   has workflows. No signal detects it, so it moves no verdict — say so
+   rather than implying it raises a score.
+
    **This is the only workflow plumbline generates** — the one that runs
    plumbline. Do not expect it to scaffold a coverage gate, nightly
    suite, or triage automation; those remain advisory via ` + "`fix_hint`" + `.

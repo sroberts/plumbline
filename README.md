@@ -50,6 +50,10 @@ plumbline fix l2.agent-instructions --apply
 # Install a Claude Code skill so AI agents in your repo know how to drive plumbline.
 plumbline install-skill --apply
 
+# Scaffold .github/dependabot.yml from the manifests this repo actually has.
+plumbline install-dependabot --list     # what would it cover?
+plumbline install-dependabot --apply
+
 # Render the README status badge (self-contained SVG, no third-party service).
 plumbline badge
 
@@ -108,6 +112,7 @@ Schemas are published via `plumbline schema {verdict, signal-result, event, conf
 | `enter` | Open the detail screen for the selected signal |
 | `a` | Apply the signal's fix (only on signals marked `✚`) |
 | `r` | Re-run the scan in place |
+| `d` | Scaffold `.github/dependabot.yml` from the repo's manifests |
 | `i` | Install plumbline's usage guide for a coding-agent tool (target picker) |
 | `w` | Install the GitHub Actions workflow that runs plumbline (variant picker) |
 | `esc` | Back |
@@ -117,7 +122,7 @@ In the fix flow: `tab`/`shift+tab` between input fields, `enter` advances, `y`/`
 
 ## Apply fixes (safety)
 
-`plumbline fix`, `plumbline install-skill`, and `plumbline install-ci` are the only paths through which plumbline writes inside the target repo (`plumbline badge` also writes, but only its own SVG, at a path you name). Defaults are conservative:
+`plumbline fix`, `plumbline install-skill`, `plumbline install-ci`, and `plumbline install-dependabot` are the only paths through which plumbline writes inside the target repo (`plumbline badge` also writes, but only its own SVG, at a path you name). Defaults are conservative:
 
 - Dry-run by default; `--apply` is required to actually write.
 - `create-file` refuses to overwrite an existing file.

@@ -50,6 +50,10 @@ make lint       # gofmt + go vet (golangci-lint if installed)
 - `internal/badge` — the SVG `plumbline badge` writes. Self-contained (no
   shields.io round-trip); output must stay byte-stable or the drift gate
   churns.
+- `internal/dependabot` — the `.github/dependabot.yml` `plumbline
+  install-dependabot` writes, derived from the manifests present rather
+  than templated. Deliberately detected by no signal, so scaffolding it
+  moves no verdict; SPEC.md §4 "The second exception" has the argument.
 - `internal/ciworkflow` — the workflow `plumbline install-ci` writes, and
   the variant registry behind both the CLI `--list` and the TUI `[w]`
   picker. The *only* workflow plumbline generates; read SPEC.md §4 "The

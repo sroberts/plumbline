@@ -396,9 +396,10 @@ const helpFix = `# Applying Fixes
 plumbline can scaffold or extend a repo's L2 instruction artifacts —
 the files that turn an L1 "Assisted" repo into an L2 "Instructed" one.
 
-'fix' is one of three commands that write inside the target repo —
-the others are 'install-skill' (an agent usage guide) and 'install-ci'
-(the workflow that runs plumbline). 'plumbline badge' also writes, but
+'fix' is one of four commands that write inside the target repo — the
+others are 'install-skill' (an agent usage guide), 'install-ci' (the
+workflow that runs plumbline), and 'install-dependabot' (a Dependabot
+config derived from the repo's own manifests). 'plumbline badge' also writes, but
 only its own generated SVG, at a path you name. Everything else is
 read-only. All three writers are dry-run by default, refuse to
 overwrite, and share the safety guarantees below (SPEC.md §11).
@@ -449,7 +450,11 @@ L3+ *signal* fixes stay advisory: no signal fixer writes a workflow
 file. Read the signal's fix_hint for the shape to build, and use
 '--debug' to tell a detector gap from a real one.
 
-The single exception is 'plumbline install-ci', which writes the one
+'plumbline install-dependabot' writes .github/dependabot.yml, derived
+from the manifests actually present. No signal detects that file, so it
+moves no verdict — it improves a repo without plumbline taking credit.
+
+The other exception is 'plumbline install-ci', which writes the one
 workflow that runs plumbline itself — not a coverage gate, nightly
 suite, or triage automation. SPEC.md §4 records why the boundary sits
 there. The generated workflow earns the repo no credit: l3.build-lint-gate
