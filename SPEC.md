@@ -132,25 +132,63 @@ the catalog now says so.
 #### The second exception: `plumbline install-dependabot`
 
 `install-dependabot` also writes a file the scaffolding rule would
-otherwise forbid, but it clears the bar for a different and simpler
-reason than `install-ci` does: **no signal detects it.**
+otherwise forbid. It clears the bar, but the reason has to be stated
+carefully, because the obvious version of it is only contingently true.
 
-`l4.self-modifying-config` looks for a workflow that opens pull requests
-back into the repo — `peter-evans/create-pull-request`,
-`git-auto-commit-action`, or a `git commit` + `git push` pair in a step.
-A Dependabot config is none of those. So running this command improves a
-repo without moving its verdict by a single point, and reason 1 has
-nothing to bite on: plumbline cannot be accused of grading its own
-homework when the homework is ungraded.
-`TestInstallDependabot_MovesNoVerdict` pins that, and will fail if a
-future signal starts crediting the file.
+**Today, no signal detects the file.** `l4.self-modifying-config` looks
+for a workflow that opens pull requests back into the repo —
+`peter-evans/create-pull-request`, `git-auto-commit-action`, or a
+`git commit` + `git push` pair in a step. A Dependabot config is none of
+those, so running the command moves no verdict, and reason 1 has nothing
+to bite on: plumbline is not grading its own homework when the homework
+is ungraded. `TestInstallDependabot_MovesNoVerdict` pins it.
 
-Reason 3 (§2 rules out recommending specific tooling) is the one that
-needs an answer. Dependabot is one option and Renovate is the other. The
-answer is scope: the MVP is GitHub Actions only (§6), and within a
-GitHub-only assessor, GitHub's own dependency updater is the platform
-default rather than a competitive pick — the same standing
-`actions/checkout` has in the generated workflow.
+That fact is a property of the catalog as it stands, not of Dependabot.
+Left there, the argument would collapse silently the first time someone
+adds a dependency-automation signal. The durable form needs the model.
+
+**Where dependency updating actually sits in the ACMM.** The paper never
+mentions Dependabot, and its L4 "self-modifying configuration" is
+narrower than the phrase suggests: the worked example is
+`auto-qa-tuning.json`, *where categories with acceptance rates below 20%
+are automatically blocked* — a measurement → threshold → config-change
+loop in which the codebase observes **its own** outcomes and rewrites its
+own policy. Dependency updating is not that. Its input is upstream
+releases, which are external to the codebase.
+
+Since levels are assigned by loop topology rather than autonomy (§6),
+what matters is where the loop closes:
+
+| Setup | Topology | Shape |
+|---|---|---|
+| Dependabot alone | upstream → PR → **a human merges** | human in the path; weaker than L3, since the signal is not about this codebase |
+| Dependabot + auto-merge gated on CI | upstream → PR → CI gates → **merges itself** | genuinely L4 — closes without a human, guarded by the L3 measurement layer |
+
+The second row is a real L4 topology, and a textbook instance of the
+no-skip rule: auto-merging is only safe once the tests deciding it are
+trustworthy. Enabling it without CI gates builds the *autonomy without
+guardrails* anti-pattern directly, which is what `l4.measurement-backed`
+exists to catch.
+
+**So the boundary is drawn by what the scaffolder writes, not by what the
+catalog currently misses.** `install-dependabot` emits update blocks and
+a schedule — the *open* loop. It writes nothing that merges: no
+auto-merge workflow, no `gh pr merge`, no approval automation. If a
+dependency-automation signal is ever added it should detect the *closed*
+loop, which is the part plumbline does not generate. Generator and
+detector then stay disjoint by construction rather than by accident, and
+reason 1 holds no matter how the catalog grows.
+
+It also sets the right expectation for the command: it buys dependency
+*visibility*, which is hygiene, not a maturity level. Nothing about
+running it should be described as raising a score.
+
+Reason 3 (§2 rules out recommending specific tooling) is the remaining
+objection, since Renovate is the alternative. The answer is scope: the
+MVP is GitHub Actions only (§6), and inside a GitHub-only assessor
+GitHub's own updater is the platform default rather than a competitive
+pick — the same standing `actions/checkout` has in the generated
+workflow.
 
 The content is **derived, not templated**: one update block per manifest
 actually present, keyed by directory. A config naming an ecosystem whose

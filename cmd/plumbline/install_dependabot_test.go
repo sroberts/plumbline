@@ -121,6 +121,24 @@ func TestInstallDependabot_IntervalAndList(t *testing.T) {
 // TestInstallDependabot_MovesNoVerdict — the scope argument in SPEC.md §4
 // rests on this: plumbline must not credit a repo for a file plumbline
 // wrote, and nothing in the catalog detects a Dependabot config.
+//
+// If this test ever fails, do not "fix" it by relaxing the assertion. It
+// failing means a signal has started crediting a file plumbline
+// generates, which is the circularity §4 exists to prevent.
+//
+// The durable boundary is what the scaffolder writes, not what the
+// catalog happens to miss. In ACMM terms Dependabot alone is an open
+// loop — upstream release, PR, a human merges — and the human in the
+// path is what keeps it below L4. Auto-merge gated on CI closes it, and
+// that closed loop is a real L4 topology (and a no-skip case: safe only
+// once the tests deciding it are trustworthy).
+//
+// install-dependabot deliberately writes only the open half: update
+// blocks and a schedule, nothing that merges. A future
+// dependency-automation signal should detect the *closed* loop, which
+// plumbline does not generate — keeping generator and detector disjoint
+// by construction. If you are here because you added such a signal,
+// check it is matching auto-merge and not the config file.
 func TestInstallDependabot_MovesNoVerdict(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "go.mod", "module x\n")

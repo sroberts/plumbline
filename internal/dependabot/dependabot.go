@@ -5,12 +5,20 @@
 // Scope note (SPEC.md §4). plumbline deliberately does not scaffold the
 // artifacts its own signals look for — a generator and a detector sharing
 // an author agree by construction, and the catalog stops meeting the
-// shapes it has not seen. This config is outside that rule for a reason
-// worth stating: **no signal detects it.** `l4.self-modifying-config`
-// looks for workflows that open pull requests back to the repo, not for a
-// Dependabot config, so running this command moves no score. It makes a
-// repo better without making plumbline say so, which is the only shape of
-// scaffolding the scope rule has no argument against.
+// shapes it has not seen.
+//
+// This package stays outside that rule by writing only the *open* half of
+// the loop: update blocks and a schedule, and nothing that merges. In
+// ACMM terms Dependabot alone leaves a human in the path (upstream
+// release, PR, someone merges); auto-merge gated on CI is what closes it,
+// and the closed loop is the L4-shaped one. Keep it that way. Emitting an
+// auto-merge workflow here would hand plumbline a file its own catalog
+// could credit, which is exactly what §4 forbids.
+//
+// Today no signal detects the config at all, so running the command moves
+// no verdict — but that is a fact about the catalog, not a guarantee.
+// The guarantee is the line above: generate the open loop, never the
+// closed one.
 //
 // The content is derived from the repo rather than templated: a config
 // listing ecosystems whose manifests are absent makes Dependabot log an
