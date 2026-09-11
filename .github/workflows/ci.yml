@@ -80,7 +80,7 @@ jobs:
         # can flake on busy CI runners. Three attempts costs <1 minute
         # in the worst case and saves the build from a noisy CI runner
         # erasing real signal. (l4.error-recovery)
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           max_attempts: 3
           timeout_minutes: 5
