@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: check out merged head
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0  # need the base commit's blob for `git show`
           ref: ${{ github.event.pull_request.merge_commit_sha }}
