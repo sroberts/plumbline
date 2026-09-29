@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"strings"
 
 	"github.com/sroberts/plumbline/internal/scanner"
 	"github.com/sroberts/plumbline/internal/signals"
@@ -30,6 +31,23 @@ var agentInstructionsPaths = []string{
 	".windsurfrules",
 }
 
+// detectOnlyAgentPaths are further agent-rule conventions plumbline
+// credits but does not scaffold: fix offers only agentInstructionsPaths,
+// since picking a tool the team may not use is not plumbline's call.
+var detectOnlyAgentPaths = []string{
+	"GEMINI.md",
+	".clinerules",
+	".junie/guidelines.md",
+}
+
+// agentInstructionsDirs are directories whose contents are agent rules
+// (Cursor's rules dir, Copilot's path-scoped instructions). Matched by
+// prefix and suffix after the fixed paths above miss.
+var agentInstructionsDirs = []struct{ prefix, suffix string }{
+	{".cursor/rules/", ".mdc"},
+	{".github/instructions/", ".instructions.md"},
+}
+
 // agentInstructionsLineThreshold is the bar for "substantive" content.
 // Lower than CLAUDE.md's old 30-line bar because per-tool rule files
 // (Cursor, Windsurf) are routinely shorter and still useful.
@@ -49,11 +67,11 @@ func (AgentInstructions) ID() string        { return "l2.agent-instructions" }
 func (AgentInstructions) Level() acmm.Level { return acmm.LevelInstructed }
 func (AgentInstructions) Family() string    { return "instructions" }
 func (AgentInstructions) Title() string {
-	return "Agent instructions present (CLAUDE.md / AGENTS.md / copilot-instructions / etc.)"
+	return "Agent instructions present (AGENTS.md / CLAUDE.md / copilot-instructions / .cursor/rules / etc.)"
 }
 
 func (s AgentInstructions) Detect(_ context.Context, idx *scanner.RepoIndex) acmm.Result {
-	for _, path := range agentInstructionsPaths {
+	for _, path := range append(append([]string{}, agentInstructionsPaths...), detectOnlyAgentPaths...) {
 		data, err := idx.Read(path)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
@@ -62,6 +80,26 @@ func (s AgentInstructions) Detect(_ context.Context, idx *scanner.RepoIndex) acm
 			continue
 		}
 		return scoreAgentFile(path, data)
+	}
+
+	// Directory-scoped rule files, then an AGENTS.md below the root: the
+	// AGENTS.md convention nests, so a monorepo package may carry its own.
+	for _, f := range idx.Files {
+		for _, d := range agentInstructionsDirs {
+			if strings.HasPrefix(f.Path, d.prefix) && strings.HasSuffix(f.Path, d.suffix) {
+				if data, err := idx.Read(f.Path); err == nil {
+					return scoreAgentFile(f.Path, data)
+				}
+			}
+		}
+	}
+	for _, p := range idx.ByName["AGENTS.md"] {
+		if strings.Contains(p, "testdata/") {
+			continue
+		}
+		if data, err := idx.Read(p); err == nil {
+			return scoreAgentFile(p, data)
+		}
 	}
 
 	// None of the known agent-instructions files exist.
@@ -132,7 +170,7 @@ func scoreAgentFile(path string, data []byte) acmm.Result {
 
 func listKnownPaths() string {
 	out := ""
-	for i, p := range agentInstructionsPaths {
+	for i, p := range append(append([]string{}, agentInstructionsPaths...), detectOnlyAgentPaths...) {
 		if i > 0 {
 			out += ", "
 		}

@@ -111,3 +111,34 @@ func TestAgentInstructions_PrefersFirstFound(t *testing.T) {
 		t.Errorf("Evidence[0].Path = %q, want CLAUDE.md (priority order)", got.Evidence[0].Path)
 	}
 }
+
+func TestAgentInstructions_RelatedRuleFiles(t *testing.T) {
+	body := "# Rules\n\n" + strings.Repeat("rule.\n", 25)
+	for _, path := range []string{
+		"GEMINI.md",
+		".clinerules",
+		".junie/guidelines.md",
+		".cursor/rules/style.mdc",
+		".github/instructions/go.instructions.md",
+		"packages/api/AGENTS.md", // nested AGENTS.md, per the open convention
+	} {
+		path := path
+		t.Run(path, func(t *testing.T) {
+			got := runSignal(t, AgentInstructions{}, fstest.MapFS{path: {Data: []byte(body)}})
+			if got.Score != acmm.ScoreFound {
+				t.Errorf("score = %v, want Found", got.Score)
+			}
+			if len(got.Evidence) == 0 || got.Evidence[0].Path != path {
+				t.Errorf("evidence should cite %s, got %+v", path, got.Evidence)
+			}
+		})
+	}
+}
+
+func TestAgentInstructions_IgnoresTestdataAgentsMD(t *testing.T) {
+	body := "# Rules\n\n" + strings.Repeat("rule.\n", 25)
+	got := runSignal(t, AgentInstructions{}, fstest.MapFS{"testdata/x/AGENTS.md": {Data: []byte(body)}})
+	if got.Score != acmm.ScoreMissing {
+		t.Errorf("a fixture AGENTS.md must not credit the repo; score = %v", got.Score)
+	}
+}

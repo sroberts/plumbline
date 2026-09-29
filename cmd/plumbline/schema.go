@@ -81,6 +81,7 @@ const schemaVerdict = `{
           "patternProperties": { "^[2-5]$": { "type": "number", "minimum": 0, "maximum": 1 } }
         },
         "next_gap": { "type": "array", "items": { "type": "string" } },
+        "capped_by": { "type": "array", "items": { "type": "string" }, "description": "Verification-gate signals that held the level below what the per-level averages earned. Absent when no cap applied." },
         "min_confidence_applied": { "type": "string", "enum": ["low", "medium", "high"] }
       }
     },

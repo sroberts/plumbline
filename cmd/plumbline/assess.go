@@ -552,10 +552,10 @@ func stdoutIsTerminal(w io.Writer) bool {
 // the alias resolver handles the renamed-IDs side.
 func validateSignalSet(v string) error {
 	switch v {
-	case "", "latest", buildinfo.SignalSetVersion, "v1":
+	case "", "latest", buildinfo.SignalSetVersion, "v1", "v2":
 		return nil
 	default:
-		return fmt.Errorf("unknown --signal-set %q (want latest|%s|v1)", v, buildinfo.SignalSetVersion)
+		return fmt.Errorf("unknown --signal-set %q (want latest|%s|v2|v1)", v, buildinfo.SignalSetVersion)
 	}
 }
 

@@ -8,7 +8,7 @@ Each signal is a deterministic detector that returns a status (`found` / `partia
 
 | ID | Family | Title |
 |---|---|---|
-| `l2.agent-instructions` | instructions | Agent instructions present (CLAUDE.md / AGENTS.md / copilot-instructions / etc.) |
+| `l2.agent-instructions` | instructions | Agent instructions present (AGENTS.md / CLAUDE.md / copilot-instructions / .cursor/rules / etc.) |
 | `l2.commit-rules` | templates | Commit-message conventions encoded in repo |
 | `l2.contributor-guide` | instructions | Contributor / development guide present and substantive |
 | `l2.pr-template` | templates | PR template with structured checklist |
@@ -18,14 +18,17 @@ Each signal is a deterministic detector that returns a status (`found` / `partia
 | ID | Family | Title |
 |---|---|---|
 | `l3.acceptance-tracking` | monitoring | Tracked metrics file (acceptance rates / auto-qa-tuning) |
+| `l3.api-contract` | verification | Machine-verifiable interface contract (OpenAPI / Protobuf / GraphQL / JSON Schema) validated in CI |
 | `l3.build-lint-gate` | ci-gate | CI workflow runs build and lint on push or PR |
 | `l3.coverage-gate` | coverage | Coverage gate fails CI below a threshold |
 | `l3.coverage-suite` | coverage | Scheduled (cron) coverage suite |
 | `l3.error-monitoring` | monitoring | Error-monitoring SDK declared in dependency manifest |
 | `l3.flaky-analysis` | compliance | Flaky-test tracking workflow or report file |
+| `l3.lint-config` | verification | Opinionated lint and format configuration committed (golangci-lint / ruff / biome / eslint / prettier) |
 | `l3.metrics-acted-on` | metrics | Collected metrics are acted on, not just published |
 | `l3.nightly-compliance` | compliance | Scheduled compliance / a11y / perf / security suite |
 | `l3.user-feedback` | feedback | User-feedback / NPS / survey channel wired up |
+| `l3.verification-harness` | verification | Deterministic local verification: runnable tests, a lint/check command, and CI that runs them |
 
 ## L4 — Adaptive
 
@@ -47,4 +50,4 @@ Each signal is a deterministic detector that returns a status (`found` / `partia
 | `l5.multi-repo-orchestration` | automation | Workflow fans out across multiple repositories |
 | `l5.self-improvement` | automation | Workflow updates instruction files based on merged PRs |
 
-_23 signals total._
+_26 signals total._

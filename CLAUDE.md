@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Plumbline is **implemented and shipping**. It is a Go module
 (`github.com/sroberts/plumbline`, Go 1.26.1) with a Cobra CLI, a Bubble Tea
-TUI, a 23-signal detector catalog, GoReleaser packaging, and nine CI
+TUI, a 26-signal detector catalog, GoReleaser packaging, and nine CI
 workflows. It assesses itself at ACMM Level 5.
 
 `SPEC.md` is the implementation contract — numbered sections, cited

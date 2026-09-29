@@ -167,6 +167,10 @@ type Verdict struct {
 	LevelScores          map[Level]float64 `json:"level_scores"`
 	NextGap              []string          `json:"next_gap"`
 	MinConfidenceApplied Confidence        `json:"min_confidence_applied"`
+	// CappedBy lists the verification-gate signals that held the level
+	// below what the per-level averages alone would have earned. Absent
+	// when no cap applied. See SPEC.md §7 "Verification gate".
+	CappedBy []string `json:"capped_by,omitempty"`
 }
 
 // Report is the top-level JSON document emitted by `assess --json`.

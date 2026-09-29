@@ -205,3 +205,78 @@ func TestCompute_CustomThreshold(t *testing.T) {
 		t.Errorf("with threshold=0.6, level = %d, want 2", v.Level)
 	}
 }
+
+// A repo whose per-level averages reach L3 but which cannot verify its own
+// work locally must be held at L2, and the verdict must say why.
+func TestCompute_VerificationGateCapsAtLevelTwo(t *testing.T) {
+	build := func(gateScore float64) []acmm.SignalResult {
+		return []acmm.SignalResult{
+			sr("l2.a", acmm.LevelInstructed, acmm.ScoreFound, acmm.ConfidenceHigh),
+			sr("l3.a", acmm.LevelMeasured, acmm.ScoreFound, acmm.ConfidenceHigh),
+			sr("l3.b", acmm.LevelMeasured, acmm.ScoreFound, acmm.ConfidenceHigh),
+			sr("l3.c", acmm.LevelMeasured, acmm.ScoreFound, acmm.ConfidenceHigh),
+			sr("l3.verification-harness", acmm.LevelMeasured, gateScore, acmm.ConfidenceMedium),
+		}
+	}
+
+	t.Run("missing harness caps and is named", func(t *testing.T) {
+		v := Compute(build(acmm.ScoreMissing), Options{})
+		// Averages alone: L3 = 3/4 = 0.75 ≥ 0.7, so without the gate this is L3.
+		if got := v.LevelScores[acmm.LevelMeasured]; got < 0.7 {
+			t.Fatalf("test setup: L3 average = %v, want ≥ 0.7", got)
+		}
+		if v.Level != acmm.LevelInstructed {
+			t.Errorf("Level = %d, want 2 (capped)", v.Level)
+		}
+		if !slices.Equal(v.CappedBy, []string{"l3.verification-harness"}) {
+			t.Errorf("CappedBy = %v", v.CappedBy)
+		}
+		if !slices.Contains(v.NextGap, "l3.verification-harness") {
+			t.Errorf("the gate signal must appear in NextGap: %v", v.NextGap)
+		}
+	})
+
+	t.Run("stubbed harness (tests, no entrypoint) still caps", func(t *testing.T) {
+		v := Compute(build(acmm.ScoreStubbed), Options{})
+		if v.Level != acmm.LevelInstructed || len(v.CappedBy) != 1 {
+			t.Errorf("Level=%d CappedBy=%v, want capped at 2", v.Level, v.CappedBy)
+		}
+	})
+
+	t.Run("runnable local tests clear the gate", func(t *testing.T) {
+		v := Compute(build(acmm.ScoreIncomplete), Options{})
+		if v.Level != acmm.LevelMeasured {
+			t.Errorf("Level = %d, want 3", v.Level)
+		}
+		if v.CappedBy != nil {
+			t.Errorf("CappedBy = %v, want nil when the gate passes", v.CappedBy)
+		}
+	})
+
+	t.Run("gate does not report a cap that changed nothing", func(t *testing.T) {
+		// Already at L2 on averages: the gate failing is not what held it.
+		results := []acmm.SignalResult{
+			sr("l2.a", acmm.LevelInstructed, acmm.ScoreFound, acmm.ConfidenceHigh),
+			sr("l3.a", acmm.LevelMeasured, acmm.ScoreMissing, acmm.ConfidenceHigh),
+			sr("l3.verification-harness", acmm.LevelMeasured, acmm.ScoreMissing, acmm.ConfidenceHigh),
+		}
+		v := Compute(results, Options{})
+		if v.Level != acmm.LevelInstructed || v.CappedBy != nil {
+			t.Errorf("Level=%d CappedBy=%v, want L2 with no cap", v.Level, v.CappedBy)
+		}
+	})
+
+	t.Run("disabled gate signal (absent) never caps", func(t *testing.T) {
+		results := build(acmm.ScoreFound)[:4] // drop the harness
+		if v := Compute(results, Options{}); v.Level != acmm.LevelMeasured || v.CappedBy != nil {
+			t.Errorf("Level=%d CappedBy=%v, want L3 uncapped", v.Level, v.CappedBy)
+		}
+	})
+
+	t.Run("min-confidence high treats medium partial credit as missing", func(t *testing.T) {
+		v := Compute(build(acmm.ScoreIncomplete), Options{MinConfidence: acmm.ConfidenceHigh})
+		if v.Level != acmm.LevelInstructed || len(v.CappedBy) != 1 {
+			t.Errorf("Level=%d CappedBy=%v, want gate to fail under --min-confidence high", v.Level, v.CappedBy)
+		}
+	})
+}

@@ -78,10 +78,12 @@ The AI Codebase Maturity Model (ACMM) defines five levels by **feedback loop top
 The human initiates every interaction. AI is sophisticated autocomplete. No persistent context between sessions. The implicit floor — every repo starts here.
 
 ## Level 2 — Instructed (one-way: human → AI)
-Preferences and conventions are encoded into instruction files (CLAUDE.md, .github/copilot-instructions.md, contributor guides, PR templates). AI output becomes consistent across sessions.
+Preferences and conventions are encoded into instruction files (AGENTS.md, CLAUDE.md, .github/copilot-instructions.md, .cursor/rules, contributor guides, PR templates). AI output becomes consistent across sessions.
 
 ## Level 3 — Measured (AI → metrics → human)
 Quantitative signals about agent / CI performance: coverage gates on every PR, nightly compliance suites, flaky-test analysis, error monitoring, NPS, acceptance-rate logs.
+
+Measurement rests on **verification**: an agent is bounded by how quickly and deterministically it can check its own work, not by how fast it can generate code. L3 therefore also asks for one local command that runs the tests (l3.verification-harness — a gate, see 'plumbline help scoring'), committed opinionated lint/format config (l3.lint-config), and machine-verifiable interface contracts such as OpenAPI, Protobuf, GraphQL or JSON Schema validated in CI (l3.api-contract).
 
 ## Level 4 — Adaptive (loop closes without human in the path)
 The system acts on its own metrics. Self-modifying configs, automated triage workflows, threshold-driven blocks, worktree-based concurrent agents, error recovery.
@@ -140,6 +142,9 @@ Empty levels (no signals registered) score 0 — we cannot pass a level we have 
 
 ## No-skip rule
 Verdict.Level is the **highest L** where every k in 2..L meets the pass threshold. The climb stops at the first level that fails. A repo with stellar L3 but missing L2 is L1.
+
+## Verification gate
+l3.verification-harness is a gate, not just an average. If it scores below 0.67 — no test that one local command runs — the verdict is capped at L2 even when the L3 average would pass, and the verdict lists the signal under 'capped_by'. level_scores still report what each level earned. A disabled or NA gate signal never caps; --min-confidence applies to it like any other signal.
 
 ## Pass threshold
 Default: 0.7. Configurable via .plumbline.yml or '--threshold' (future flag).
@@ -473,7 +478,7 @@ const helpCompatibility = `# Compatibility & Signal-Set Versioning
 
 Every Verdict carries:
   tool_version       e.g. 1.4.2 (semver)
-  signal_set_version e.g. v2   (rule-set major)
+  signal_set_version e.g. v3   (rule-set major)
 
 ## Within a major version of signal_set_version
 - New signals can be added (a previously-passing repo can pick up additional credit, never lose it).
@@ -484,11 +489,23 @@ Every Verdict carries:
 - Removing or renaming a signal.
 
 ## Pinning in CI
-Use '--signal-set v2' so the verdict cannot silently flip when plumbline upgrades:
+Use '--signal-set v3' so the verdict cannot silently flip when plumbline upgrades:
 
-  plumbline assess --fail-below 3 --signal-set v2
+  plumbline assess --fail-below 3 --signal-set v3
 
 If the pinned version is unavailable (retired, tool too old/new), exit code 3 fires with a migration message.
+
+## v2 → v3: the verification gate
+v3 tightens one rule. l3.verification-harness is now a gate: when it scores
+below 0.67 (no test that a single local command runs), the verdict is capped
+at L2 however the other L3 signals score. The verdict lists the signal under
+'capped_by'. Repos that already run tests locally and in CI are unaffected.
+v3 also adds l3.verification-harness, l3.api-contract and l3.lint-config, and
+recognizes more agent-rule files (GEMINI.md, .cursor/rules/*.mdc, nested
+AGENTS.md, ...) under l2.agent-instructions. No IDs were renamed.
+Note: '--signal-set' checks that the pinned version is one this binary
+knows; it does not run an older rule set. A repo pinned to v2 is still scored
+by the v3 rules, so expect the cap on upgrade if there is no runnable test.
 
 ## Deprecation aliases (v1 → v2)
 The following IDs were renamed; v1's names still work for one minor
