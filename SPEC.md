@@ -397,7 +397,7 @@ Signals are derived directly from Table 2 ("Complete Feedback Loop Inventory") o
 
 | ID | Detection rule |
 |---|---|
-| `l2.agent-instructions` | At least **one** recognized agent-directive file is present at root, with a heading and ≥ 20 non-blank lines. Recognized files (priority order): `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`, `.cursorrules`, `.windsurfrules`. **See "Deviations from the source paper" below.** |
+| `l2.agent-instructions` | At least **one** recognized agent-directive file is present at root, with a heading and ≥ 20 non-blank lines. Recognized files (priority order): `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`, `.cursorrules`, `.windsurfrules`, then `GEMINI.md`, `.clinerules`, `.junie/guidelines.md`, `.cursor/rules/*.mdc`, `.github/instructions/*.instructions.md`, and finally an `AGENTS.md` below the root (the convention nests). Only the first five are offered by `plumbline fix`; the rest are credited but never scaffolded. Paths under `testdata/` never count. **See "Deviations from the source paper" below.** |
 | `l2.contributor-guide` | `CONTRIBUTING.md` or `.github/CARD_DEVELOPMENT_GUIDE.md` (or analogue) present. |
 | `l2.pr-template` | `.github/pull_request_template.md` (or `PULL_REQUEST_TEMPLATE/`) contains ≥ 3 markdown checkboxes (`- [ ]`). |
 | `l2.commit-rules` | `.gitmessage`, `commitlint.config.*`, or `.github/commit-convention.md` present. |
@@ -415,6 +415,10 @@ Signals are derived directly from Table 2 ("Complete Feedback Loop Inventory") o
 | `l3.user-feedback` | NPS/CSAT survey component (filename match `*nps*`, `*survey*`) **or** a `feedback/` issue template. |
 | `l3.acceptance-tracking` | A tracked file matching `auto-qa-tuning.json`, `acceptance-rates.*`, or analogous JSON in a `metrics/` directory. |
 | `l3.metrics-acted-on` | The **dashboard-graveyard** check. If CI publishes a metric (Codecov, Coveralls, Sonar, Datadog, or an `upload-artifact` whose name/path is a metric), at least one step must act on a number — a failure condition (`exit 1`, `::error::`, `--fail-*`) in a step that also references a metric. Both halves are required: a bare `exit 1` in a gofmt check acts on no metric. `NA` when nothing is published — this signal grades what happens to metrics, not whether they exist. |
+
+| `l3.verification-harness` | The **verification gate** (§7). Facts gathered: a test file exists (outside `testdata/`/`fixtures/`); a one-command local test entrypoint exists (Makefile/justfile `test`/`check`/`verify`/`ci` target, Taskfile task, a non-placeholder `package.json` `test` script, pytest/tox/nox config, or a language-native runner — `go.mod`, `Cargo.toml`); a local lint/check entrypoint exists (same sources, plus `go vet`/`cargo clippy` as toolchain built-ins); a `push`/`pull_request` workflow runs the tests. Scores: `0.0` no tests and no entrypoint; `0.33` tests without an entrypoint, or an entrypoint without tests; `0.67` runnable tests but no local lint/check command or no CI run; `1.0` all four. |
+| `l3.api-contract` | A declarative interface contract: `openapi`/`swagger`/`asyncapi` `.yaml/.yml/.json`, `.proto`, `.graphql`/`.gql`, or `*.schema.json`, excluding `testdata/`, `fixtures/`, `examples/`. `NA` when none exists — absence is not a defect for a repo with no wire interface. `0.33` file(s) with no recognizable definition; `0.67` real contract, not validated in CI; `1.0` a `push`/`pull_request` workflow lints, diffs or generates from it (spectral, redocly, `buf lint/breaking`, oasdiff, graphql-inspector, ajv, …). Scheduled-only checks do not count. |
+| `l3.lint-config` | Committed lint/format configuration: golangci-lint, ruff (incl. `[tool.ruff` in `pyproject.toml`), biome, eslint, prettier, rubocop, flake8, pylint, clippy, rustfmt, stylelint. Strictness = the config **selects rules explicitly** rather than inheriting defaults (`enable`/`select`/`rules`/`extends`). Formatting coverage = a formatter is configured, built into the linter (ruff, biome, rubocop), or built into the toolchain (a Go module has gofmt). `1.0` explicit lint rules + formatter; `0.67` a linter, but on defaults or without a formatter; `0.33` a formatter only; `0.0` none. |
 
 **Level 4 — Adaptive**
 
@@ -454,6 +458,30 @@ Plumbline collapses these into a single `l2.agent-instructions` that fires on th
 - AGENTS.md, .cursorrules, and .windsurfrules postdate the paper and are now common in the wild. Pinning the rule to the two files the paper named would mean penalizing repos that adopted the newer conventions.
 
 **Caveat:** teams that *do* genuinely use multiple agents in concert (the KubeStellar pattern) get the same single-signal credit as a single-tool team. We accept this loss of resolution at L2 because the catalog is about *encoding judgement*, not auditing tool coverage. Teams that want stricter enforcement can add custom signals via the future plugin mechanism (§13).
+
+#### Verification pillars and their source
+
+Three L3 signals, and the verdict gate in §7, come from Eno Reyes (Factory AI), ["Making Codebases Agent Ready"](https://www.youtube.com/watch?v=ShuJ_CN6zr4). This is **not** in the source paper's Table 2, so it is recorded here as a deviation rather than passed off as the paper's model.
+
+The talk's argument is the **asymmetry of verification**: an autonomous agent is bounded by how quickly, deterministically and cheaply its work can be *checked*, not by how well it generates. The audit question shifts from "how capable is the model?" to "how verifiable is this repo?". Its pillars map onto the catalog as:
+
+| Pillar | Where it lives |
+|---|---|
+| Agent directives (`AGENTS.md` et al.) | `l2.agent-instructions` — already collapsed to one signal; the recognized set was widened (loosening only) |
+| Opinionated lint / formatting | `l3.lint-config` (config exists and is explicit) alongside `l3.build-lint-gate` (CI runs one) |
+| Schema / API contract coverage | `l3.api-contract` |
+| Test-suite hygiene and determinism — "a basic test is better than no test" | `l3.verification-harness`, which gives partial credit for any test and full credit only for a one-command local run that CI also runs |
+| Spec-driven artifacts bridging intent to criteria | `l2.pr-template` (checklist) and `l2.contributor-guide`; no new signal — see below |
+
+**What is deliberately not done.** A "specification-driven artifacts" signal (plan docs, ADRs, issue forms) was considered and not added: there is no filename convention a detector could rely on without matching this repo's own `SPEC.md` by accident, and an L2 signal added to a four-signal level would be a fifth of every repo's L2 average. The existing structured-checklist signals carry that pillar.
+
+**Determinism is approximated, not measured.** The harness signal sees that a test command exists and CI runs it. It cannot tell that the suite is flaky, slow or hermetic — `l3.flaky-analysis` is the neighbouring signal for the first, and nothing in a static scan grades the others. A `Found` means "an agent has a one-command way to check its work", not "the check is trustworthy".
+
+**Rules adopted:**
+
+- Absence of an API contract is `NA`, never `Missing`. Plumbline cannot tell from files whether a repo has an interface; grading a CLI for lacking OpenAPI would measure conformity, the failure §6 "the CI gates detect ecosystem shapes" records. `l3.api-contract` can add credit and never subtract it.
+- Language-native toolchains are their own entrypoint. `go test ./...` needs no Makefile; requiring one would score the standard Go toolchain as absent.
+- The `package.json` placeholder (`echo "Error: no test specified" && exit 1`) is not a test entrypoint.
 
 #### L3: PR-template checklist is L2, not L3
 
@@ -539,6 +567,19 @@ profile: go-only
 
 The verdict object also reports the **next-level gap**: which specific signals at `L+1` are missing, ordered by impact. This is the actionable part — the user wants to know *what to add next*.
 
+### Verification gate
+
+The per-level average is not enough on its own to say a repo is Measured: a repo can accumulate scheduled suites, monitors and dashboards while an agent working in it has no way to run a test. Verification is the precondition for every loop above it.
+
+After the climb in the verdict rules above, a **gate signal** below `0.67` (after the `--min-confidence` downgrade, exactly like any other signal) holds the verdict at the level below its own. The only gate today is `l3.verification-harness`, capping at **L2**.
+
+- `level_scores` are unchanged — they report what each level's signals earned. The cap is applied to `verdict.level`, and `verdict.capped_by` lists the gate IDs *only when the cap lowered the level* (a repo already held at L2 by its averages reports no cap).
+- The gate signal is still a member of L3's average and still appears in `next_gap`, so the remedy is named where users already look.
+- A gate signal that is `NA`, or absent because the user disabled it in `.plumbline.yml`, never caps. Opting out is honored.
+- The threshold is `0.67`: "a test that one local command runs". A `0.33` (tests but no entrypoint, or an entrypoint over no tests) caps, because in both an agent has no deterministic way to check its work.
+
+**This tightens a rule, so it is a signal-set major bump: `v2` → `v3`.** A repo that scored L3+ under v2 with no runnable local tests will drop to L2 on upgrade; repos that run tests locally and in CI are unaffected. plumbline's own repo is unchanged (harness `Found`).
+
 ### Signal-set versioning
 
 A repo's verdict must not silently flip just because plumbline upgraded. The signal *catalog* and the *detection rules behind each signal* are versioned together as a **signal set** (`v1`, `v2`, …).
@@ -550,6 +591,8 @@ A repo's verdict must not silently flip just because plumbline upgraded. The sig
 - Tightening a rule, removing a signal, or renaming an ID requires a **major bump** and ships with `compat:` aliases for one minor cycle.
 
 **Verdict shape:**
+
+Signal-set history: **v1** original catalog; **v2** `l2.claude-md` and `l2.copilot-instructions` merged into `l2.agent-instructions`; **v3** the verification gate (§7) and `l3.verification-harness`, `l3.api-contract`, `l3.lint-config`. `--signal-set` currently confirms the pinned version is one this binary knows; it does not run an older rule set.
 
 Every verdict JSON includes:
 

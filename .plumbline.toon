@@ -2,8 +2,8 @@ ci_system: github-actions
 repo: .
 scanned_at: "1970-01-01T00:00:00Z"
 schema: plumbline/v1
-signal_set_version: v2
-signals[23]:
+signal_set_version: v3
+signals[26]:
   - confidence: medium
     evidence[1]{excerpt,path}:
       "# CLAUDE.md\n\nThis file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.\n\n## Project status\n\nPlumbline is **implement…",CLAUDE.md
@@ -14,7 +14,7 @@ signals[23]:
     notes[1]: CLAUDE.md has a heading and 150 non-blank lines (≥20)
     score: 1
     status: found
-    title: Agent instructions present (CLAUDE.md / AGENTS.md / copilot-instructions / etc.)
+    title: Agent instructions present (AGENTS.md / CLAUDE.md / copilot-instructions / .cursor/rules / etc.)
   - confidence: high
     evidence[1]{path}:
       .gitmessage
@@ -56,6 +56,16 @@ signals[23]:
     score: 1
     status: found
     title: Tracked metrics file (acceptance rates / auto-qa-tuning)
+  - confidence: medium
+    family: verification
+    fix_hint: "If this repo exposes an HTTP, RPC or file-format interface, describe it declaratively (openapi.yaml, a .proto, a JSON Schema) and validate it in CI."
+    id: l3.api-contract
+    level: 3
+    method: filename
+    notes[1]: no OpenAPI/Protobuf/GraphQL/JSON Schema contract found; not graded (a repo with no wire interface is not penalized)
+    score: 0
+    status: na
+    title: Machine-verifiable interface contract (OpenAPI / Protobuf / GraphQL / JSON Schema) validated in CI
   - confidence: medium
     evidence[1]{path}:
       .github/workflows/ci.yml
@@ -108,6 +118,17 @@ signals[23]:
     status: found
     title: Flaky-test tracking workflow or report file
   - confidence: medium
+    evidence[1]{path}:
+      .golangci.yml
+    family: verification
+    id: l3.lint-config
+    level: 3
+    method: content-regex
+    notes[1]: "explicit lint rules and formatter coverage: golangci-lint"
+    score: 1
+    status: found
+    title: Opinionated lint and format configuration committed (golangci-lint / ruff / biome / eslint / prettier)
+  - confidence: medium
     evidence[3]{excerpt,path}:
       upload coverage artifact,.github/workflows/coverage-nightly.yml
       coverage hard floor (catastrophic regression block),.github/workflows/ci.yml
@@ -140,6 +161,19 @@ signals[23]:
     score: 0
     status: missing
     title: User-feedback / NPS / survey channel wired up
+  - confidence: medium
+    evidence[3]{path}:
+      Makefile
+      cmd/plumbline/aliases_test.go
+      .github/workflows/ci.yml
+    family: verification
+    id: l3.verification-harness
+    level: 3
+    method: cross-file
+    notes[1]: "tests runnable locally via Makefile, lint/check via Makefile, and run in CI (.github/workflows/ci.yml)"
+    score: 1
+    status: found
+    title: "Deterministic local verification: runnable tests, a lint/check command, and CI that runs them"
   - confidence: medium
     family: automation
     fix_hint: Add a workflow on a sub-daily cron (e.g. '*/15 * * * *') that runs 'gh issue list' or hits /issues via actions/github-script and triages new issues automatically.
@@ -249,7 +283,7 @@ verdict:
   level: 5
   level_scores:
     "2": 1
-    "3": 0.7777777777777778
+    "3": 0.8181818181818182
     "4": 0.8333333333333334
     "5": 0.75
   min_confidence_applied: low

@@ -70,14 +70,25 @@ The model assigns a level by **feedback loop topology**, not by AI autonomy. Lev
 | Level | Name | Loop topology | What plumbline looks for |
 |------|------|---------------|--------------------------|
 | 1 | Assisted | Open loop | (implicit floor — no checks needed) |
-| 2 | Instructed | Human → AI | one agent-directive file (CLAUDE.md / AGENTS.md / copilot-instructions / .cursorrules / .windsurfrules), CONTRIBUTING.md, PR template, commit rules |
-| 3 | Measured | AI → metrics → human | build/lint gate, coverage gate, scheduled compliance / a11y / perf / security, flaky-test analysis, error monitoring, NPS, acceptance tracking |
+| 2 | Instructed | Human → AI | one agent-directive file (AGENTS.md / CLAUDE.md / copilot-instructions / .cursorrules / .windsurfrules / .cursor/rules / GEMINI.md), CONTRIBUTING.md, PR template, commit rules |
+| 3 | Measured | AI → metrics → human | **verification harness** (one local command runs the tests; CI runs them too), opinionated lint/format config, machine-verifiable contracts (OpenAPI / Protobuf / GraphQL / JSON Schema), build/lint gate, coverage gate, scheduled compliance / a11y / perf / security, flaky-test analysis, error monitoring, NPS, acceptance tracking |
 | 4 | Adaptive | Loop closes itself | self-modifying configs, sub-daily auto-triage, threshold-driven blocks, worktree agents, error recovery |
 | 5 | Self-Sustaining | Codebase *is* the policy | issue-to-PR pipelines, self-improvement, docs-from-PRs, multi-repo orchestration |
 
 A repo with stellar L3 but missing L2 is L1 — you cannot skip levels.
 
-Run `plumbline signals` for the 21-signal catalog or `plumbline help levels` for the long form.
+### Verification is the gate
+
+An agent is bounded by how quickly and deterministically it can *check* its work, not by how fast it can generate it. Plumbline encodes that in three L3 signals and one rule:
+
+- `l3.verification-harness` — tests exist, **one local command runs them** (`make test`, an npm `test` script, `go test ./...`), a lint/check command exists, and a push/PR workflow runs the tests. A basic test beats none: it is the anchor an agent iterates against.
+- `l3.lint-config` — committed, *opinionated* lint and format configuration (golangci-lint, ruff, biome, eslint, prettier). A linter running on defaults is not the same as a repo that has declared its style.
+- `l3.api-contract` — a machine-verifiable interface contract (OpenAPI, Protobuf, GraphQL, JSON Schema) that CI validates. Repos with no wire interface get `NA`, not a penalty.
+- **The gate:** if `l3.verification-harness` scores below 0.67, the verdict is **capped at L2** however the rest of L3 scores, and the verdict names it under `capped_by`. Dashboards do not compensate for an agent that cannot run the tests. See [SPEC.md §7](SPEC.md#verification-gate).
+
+At L2, `AGENTS.md` (the open multi-agent convention, including nested per-package files) counts alongside `CLAUDE.md`, Copilot instructions, `.cursor/rules/*.mdc`, and the other agent-rule files; structured PR templates remain the bridge from human intent to checkable criteria.
+
+Run `plumbline signals` for the 26-signal catalog or `plumbline help levels` for the long form.
 
 ## Deviations from the source paper
 
@@ -316,9 +327,14 @@ Stable IDs, stable JSON-Schema `$id`s, stable exit codes (0 ok / 1 gate-failed /
 - `the_ai_codebase_maturity_model.md` — the source paper
 - `plumbline help` — topical guides (`levels`, `signals`, `scoring`, `output`, `config`, `ci`, `agents`, `profiles`, `compatibility`, `fix`)
 
+## References & Prior Art
+
+- **Source model.** Andy Anderson (IBM Research), [*The AI Codebase Maturity Model*](https://arxiv.org/abs/2604.09388v1) — defines the five levels by feedback-loop topology.
+- **Talk.** Eno Reyes (Factory AI), ["Making Codebases Agent Ready"](https://www.youtube.com/watch?v=ShuJ_CN6zr4), AI Engineer. Its argument shaped the verification signals above: autonomous engineering agents are limited by *verification*, not by how well the model generates code — the **asymmetry of verification**, where checking a change is far cheaper to automate than producing one. The practical consequence is a shift from asking "how good is the model?" (code-generation benchmarks) to asking "how ready is the environment?" (can an agent verify its own work quickly, deterministically, and at scale?). Plumbline's `l3.verification-harness`, `l3.lint-config`, `l3.api-contract`, the `AGENTS.md` recognition at L2, and the verification gate are its attempt to make that readiness measurable from the filesystem. The talk motivates these signals; the detection rules and thresholds are plumbline's own ([SPEC.md §6](SPEC.md#verification-pillars-and-their-source)).
+
 ## Status
 
-v0.1.0 — first release. Single-developer project; the catalog covers 21 signals across L2–L5. The fix scaffolder covers the L2 catalog; L3+ fix scaffolders are intentionally deferred (the "merge into existing workflow" case needs more design).
+v0.1.0 — first release. Single-developer project; the catalog covers 26 signals across L2–L5. The fix scaffolder covers the L2 catalog; L3+ fix scaffolders are intentionally deferred (the "merge into existing workflow" case needs more design).
 
 ## License
 

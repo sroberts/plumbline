@@ -338,7 +338,8 @@ interface; an interactive Bubble Tea TUI is also available on terminals.
 
 - **Signal IDs** are stable across patch releases:
   - L2: ` + "`l2.agent-instructions`" + `, ` + "`l2.contributor-guide`" + `, ` + "`l2.pr-template`" + `, ` + "`l2.commit-rules`" + `
-  - L3: build-lint-gate, coverage-gate, coverage-suite, nightly-compliance, flaky-analysis, error-monitoring, user-feedback, acceptance-tracking, metrics-acted-on
+  - L3: build-lint-gate, coverage-gate, coverage-suite, nightly-compliance, flaky-analysis, error-monitoring, user-feedback, acceptance-tracking, metrics-acted-on,
+    verification-harness, api-contract, lint-config
   - L4: self-modifying-config, auto-triage, threshold-block, worktree-agents, error-recovery, measurement-backed
   - L5: issue-to-pr, self-improvement, docs-from-prs, multi-repo-orchestration
 - **JSON Schemas** (draft 2020-12) for verdict / signal-result / event / config
@@ -356,6 +357,13 @@ interface; an interactive Bubble Tea TUI is also available on terminals.
 - Plumbline collapses CLAUDE.md / AGENTS.md / copilot-instructions /
   .cursorrules / .windsurfrules into ONE signal (` + "`l2.agent-instructions`" + `).
   Whichever the team uses is fine; don't suggest adding all of them.
+- ` + "`l3.verification-harness`" + ` is a **gate**: when it scores below 0.67 the
+  verdict is capped at L2 no matter what else scores, and the verdict lists
+  it under ` + "`capped_by`" + `. The remedy is a real test plus one command that
+  runs it — say so plainly; "a basic test is better than no test".
+  ` + "`l3.api-contract`" + ` is ` + "`NA`" + ` (not Missing) when the repo has no
+  OpenAPI/Protobuf/GraphQL/JSON Schema file — never tell a repo with no wire
+  interface to invent one.
 - The four-step partial-credit rubric is fixed: 0.0 / 0.33 / 0.67 / 1.0.
   Don't propose a "0.5" — it's not in the rubric.
 - ` + "`--min-confidence high`" + ` gates *partial* credit only: a signal scoring a
